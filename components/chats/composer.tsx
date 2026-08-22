@@ -4,9 +4,11 @@ import { Mic, Paperclip, Send, Smile, Video } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 
+import { EmojiPicker } from "@/components/chats/emoji-picker"
 import { IconBtn } from "@/components/main/icon-btn"
 import { useChat } from "@/components/chats/chat-provider"
 import { Recorder } from "@/components/chats/recorder"
+import { playSound } from "@/lib/sounds"
 import type { RecordKind } from "@/lib/types/chat"
 import { cn } from "@/lib/utils"
 
@@ -15,7 +17,9 @@ export function Composer({ conversationId }: { conversationId: string }) {
   const [value, setValue] = useState("")
   const [recording, setRecording] = useState<RecordKind | null>(null)
   const [online, setOnline] = useState(true)
+  const [emojiOpen, setEmojiOpen] = useState(false)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const wrapRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const el = inputRef.current
@@ -39,11 +43,42 @@ export function Composer({ conversationId }: { conversationId: string }) {
     }
   }, [])
 
+  useEffect(() => {
+    if (!emojiOpen) return
+
+    function onPointer(event: PointerEvent) {
+      if (!wrapRef.current?.contains(event.target as Node)) setEmojiOpen(false)
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") setEmojiOpen(false)
+    }
+
+    window.addEventListener("pointerdown", onPointer)
+    window.addEventListener("keydown", onKey)
+    return () => {
+      window.removeEventListener("pointerdown", onPointer)
+      window.removeEventListener("keydown", onKey)
+    }
+  }, [emojiOpen])
+
   function send() {
     const text = value.trim()
     if (!text) return
     sendText(conversationId, text)
     setValue("")
+  }
+
+  function insertEmoji(emoji: string) {
+    const field = inputRef.current
+    const start = field?.selectionStart ?? value.length
+    const end = field?.selectionEnd ?? value.length
+    const next = `${value.slice(0, start)}${emoji}${value.slice(end)}`
+    setValue(next)
+    requestAnimationFrame(() => {
+      field?.focus()
+      const caret = start + emoji.length
+      field?.setSelectionRange(caret, caret)
+    })
   }
 
   function startRecording(kind: RecordKind) {
@@ -69,7 +104,16 @@ export function Composer({ conversationId }: { conversationId: string }) {
           }}
         />
       ) : (
-        <div className="flex items-end gap-2 rounded-[28px] border border-edge bg-surface-2 py-1.5 pr-1.5 pl-2 transition-[border-color,box-shadow,background-color] focus-within:border-signal focus-within:bg-surface focus-within:shadow-[0_0_0_3px_var(--signal-wash)]">
+        <div
+          ref={wrapRef}
+          className="relative flex items-end gap-2 rounded-[28px] border border-edge bg-surface-2 py-1.5 pr-1.5 pl-2 transition-[border-color,box-shadow,background-color] focus-within:border-signal focus-within:bg-surface focus-within:shadow-[0_0_0_3px_var(--signal-wash)]"
+        >
+          {emojiOpen ? (
+            <EmojiPicker
+              onPick={insertEmoji}
+              onClose={() => setEmojiOpen(false)}
+            />
+          ) : null}
           <IconBtn
             aria-label="Attach file"
             onClick={() => toast("Attach a file")}
@@ -80,7 +124,10 @@ export function Composer({ conversationId }: { conversationId: string }) {
             ref={inputRef}
             rows={1}
             value={value}
-            onChange={(event) => setValue(event.target.value)}
+            onChange={(event) => {
+              setValue(event.target.value)
+              if (event.target.value) playSound("typing")
+            }}
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault()
@@ -94,8 +141,9 @@ export function Composer({ conversationId }: { conversationId: string }) {
           <div className="flex items-center">
             <IconBtn
               aria-label="Insert emoji"
-              className="max-[479px]:hidden"
-              onClick={() => toast("Emoji picker")}
+              aria-expanded={emojiOpen}
+              active={emojiOpen}
+              onClick={() => setEmojiOpen((open) => !open)}
             >
               <Smile className="size-5 stroke-[1.75]" aria-hidden />
             </IconBtn>
