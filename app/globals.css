@@ -28,6 +28,9 @@
   --color-signal-wash: var(--signal-wash);
   --color-pulse: var(--pulse);
   --color-pulse-wash: var(--pulse-wash);
+  --color-ok: var(--ok);
+  --color-ok-wash: var(--ok-wash);
+  --color-warn: var(--warn);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -82,6 +85,9 @@
   --signal-wash: #e8eaff;
   --pulse: #ff2d6f;
   --pulse-wash: #ffe6ee;
+  --ok: #00a67d;
+  --ok-wash: #ddf5ee;
+  --warn: #e29400;
   --background: var(--paper);
   --foreground: var(--ink);
   --card: var(--surface);
@@ -132,6 +138,9 @@
   --signal-wash: #1c2240;
   --pulse: #ff4d82;
   --pulse-wash: #3b1725;
+  --ok: #1fc79c;
+  --ok-wash: #10312a;
+  --warn: #e29400;
   --background: var(--paper);
   --foreground: var(--ink);
   --card: var(--surface);
@@ -183,5 +192,66 @@
   :focus-visible {
     outline: 2px solid var(--signal);
     outline-offset: 2px;
+  }
+}
+
+@keyframes cw-typing {
+  0%,
+  100% {
+    height: 7px;
+    opacity: 0.45;
+  }
+  50% {
+    height: 19px;
+    opacity: 1;
+  }
+}
+
+@keyframes cw-rec {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.35;
+    transform: scale(0.82);
+  }
+}
+
+@keyframes cw-ripple {
+  0% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  100% {
+    transform: scale(2.1);
+    opacity: 0;
+  }
+}
+
+@keyframes cw-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+@keyframes cw-live {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cw-motion {
+    animation: none !important;
   }
 }

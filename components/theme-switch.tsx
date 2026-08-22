@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion"
 import { Moon, Sun } from "lucide-react"
+import { usePathname } from "next/navigation"
 import { useTheme } from "next-themes"
 
 import { signalEase } from "@/components/motion/motion-item"
@@ -11,8 +12,16 @@ type ThemeSwitchProps = {
   className?: string
 }
 
+const appPaths = ["/chats", "/calls", "/contacts", "/settings", "/call"]
+
 export function ThemeSwitch({ className }: ThemeSwitchProps) {
+  const pathname = usePathname()
   const { resolvedTheme, setTheme } = useTheme()
+  const hide = appPaths.some(
+    (path) => pathname === path || pathname.startsWith(`${path}/`)
+  )
+
+  if (hide) return null
 
   return (
     <motion.button

@@ -3,6 +3,7 @@
 import { ThemeProvider as NextThemesProvider } from "next-themes"
 import { Toaster } from "sonner"
 
+import { ChatProvider } from "@/components/chats/chat-provider"
 import { ThemeSwitch } from "@/components/theme-switch"
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
@@ -13,7 +14,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       enableSystem
       disableTransitionOnChange
     >
-      {children}
+      <ChatProvider>{children}</ChatProvider>
       <ThemeSwitch className="fixed right-5 bottom-5 z-50" />
       <Toaster
         theme="system"
