@@ -1,16 +1,9 @@
-import type { Metadata } from "next"
-
 import { AuthArt } from "@/components/auth/auth-art"
 import { AuthFormPanel } from "@/components/auth/auth-form-panel"
 import { ForgotPasswordForm } from "@/components/auth/forgot-password-form"
 import { MotionItem } from "@/components/motion/motion-item"
 
-export const metadata: Metadata = {
-  title: "Forgot password",
-  description: "Reset your ChatWave password with a one-time verification code.",
-}
-
-export default function ForgotPasswordPage() {
+export function ForgotPasswordPage() {
   return (
     <main className="grid min-h-dvh bg-surface lg:grid-cols-2">
       <AuthArt

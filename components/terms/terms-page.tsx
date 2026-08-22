@@ -1,15 +1,9 @@
-import type { Metadata } from "next"
-
 import { LegalDoc } from "@/components/legal/legal-doc"
+import { LegalShell } from "@/components/legal/legal-shell"
 
-export const metadata: Metadata = {
-  title: "Terms of Service",
-  description:
-    "The terms that govern your use of ChatWave messaging, voice notes, and calls.",
-}
-
-export default function TermsPage() {
+export function TermsPage() {
   return (
+    <LegalShell>
     <LegalDoc
       title="Terms of Service"
       updated="August 23, 2026"
@@ -103,5 +97,6 @@ export default function TermsPage() {
         },
       ]}
     />
+    </LegalShell>
   )
 }

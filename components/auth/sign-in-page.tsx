@@ -1,17 +1,9 @@
-import type { Metadata } from "next"
-
 import { AuthArt } from "@/components/auth/auth-art"
 import { AuthFormPanel } from "@/components/auth/auth-form-panel"
-import { SignInForm } from "@/components/auth/sign-in-form"
 import { MotionItem } from "@/components/motion/motion-item"
+import { SignInForm } from "@/components/auth/sign-in-form"
 
-export const metadata: Metadata = {
-  title: "Sign in",
-  description:
-    "Messaging, voice notes, and calls that stay in sync across every device.",
-}
-
-export default function SignInPage() {
+export function SignInPage() {
   return (
     <main className="grid min-h-dvh bg-surface lg:grid-cols-2">
       <AuthArt />

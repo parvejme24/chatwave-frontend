@@ -1,15 +1,9 @@
-import type { Metadata } from "next"
-
 import { LegalDoc } from "@/components/legal/legal-doc"
+import { LegalShell } from "@/components/legal/legal-shell"
 
-export const metadata: Metadata = {
-  title: "Privacy Policy",
-  description:
-    "How ChatWave collects, uses, and shares information for messaging, voice notes, and calls.",
-}
-
-export default function PrivacyPage() {
+export function PrivacyPage() {
   return (
+    <LegalShell>
     <LegalDoc
       title="Privacy Policy"
       updated="August 23, 2026"
@@ -118,5 +112,6 @@ export default function PrivacyPage() {
         },
       ]}
     />
+    </LegalShell>
   )
 }

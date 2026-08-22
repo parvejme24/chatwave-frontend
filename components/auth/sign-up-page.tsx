@@ -1,17 +1,9 @@
-import type { Metadata } from "next"
-
 import { AuthArt } from "@/components/auth/auth-art"
 import { AuthFormPanel } from "@/components/auth/auth-form-panel"
-import { SignUpForm } from "@/components/auth/sign-up-form"
 import { MotionItem } from "@/components/motion/motion-item"
+import { SignUpForm } from "@/components/auth/sign-up-form"
 
-export const metadata: Metadata = {
-  title: "Create account",
-  description:
-    "Join ChatWave for messaging, voice notes, and calls that stay in sync.",
-}
-
-export default function SignUpPage() {
+export function SignUpPage() {
   return (
     <main className="grid min-h-dvh bg-surface lg:grid-cols-2">
       <AuthArt
