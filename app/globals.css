@@ -255,3 +255,7 @@
     animation: none !important;
   }
 }
+
+html[data-reduce-motion] .cw-motion {
+  animation: none !important;
+}
