@@ -4,6 +4,7 @@ import { SettingsPage } from "@/components/settings/settings-page"
 
 export const metadata: Metadata = {
   title: "Settings",
+  description: "Your account, privacy, and how ChatWave behaves.",
 }
 
 export default SettingsPage
