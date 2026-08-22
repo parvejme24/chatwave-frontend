@@ -1,8 +1,17 @@
+"use client"
+
+import { useEffect } from "react"
+
 import { UserAvatar } from "@/components/shared/user-avatar"
+import { playSound } from "@/lib/sounds"
 import type { Conversation } from "@/lib/types/chat"
 
 export function TypingIndicator({ conversation }: { conversation: Conversation }) {
   const firstName = conversation.name.split(" ")[0]
+
+  useEffect(() => {
+    playSound("typing")
+  }, [conversation.id])
 
   return (
     <div className="flex items-center gap-2.5 pt-1.5 pb-0.5">

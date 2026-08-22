@@ -5,6 +5,8 @@ import Link from "next/link"
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
 
+import { playSound, startSoundLoop, stopSoundLoop } from "@/lib/sounds"
+
 export function IncomingCall() {
   const [open, setOpen] = useState(false)
 
@@ -17,7 +19,10 @@ export function IncomingCall() {
         target?.isContentEditable
 
       if (event.key === "Escape") {
-        setOpen(false)
+        setOpen((wasOpen) => {
+          if (wasOpen) playSound("callEnd")
+          return false
+        })
         return
       }
 
@@ -30,6 +35,15 @@ export function IncomingCall() {
     return () => window.removeEventListener("keydown", onKey)
   }, [])
 
+  useEffect(() => {
+    if (!open) {
+      stopSoundLoop("incoming")
+      return
+    }
+    startSoundLoop("incoming")
+    return () => stopSoundLoop("incoming")
+  }, [open])
+
   if (!open) return null
 
   return (
@@ -39,7 +53,10 @@ export function IncomingCall() {
       aria-labelledby="ring-name"
       className="fixed inset-0 z-[100] flex items-center justify-center bg-[rgba(8,11,16,0.62)] p-5 backdrop-blur-[5px]"
       onClick={(event) => {
-        if (event.target === event.currentTarget) setOpen(false)
+        if (event.target === event.currentTarget) {
+          setOpen(false)
+          playSound("callEnd")
+        }
       }}
     >
       <div className="w-full max-w-[340px] rounded-[28px] bg-surface px-[26px] pt-[34px] pb-[26px] text-center shadow-[0_24px_64px_rgba(17,24,33,0.18)]">
@@ -75,6 +92,7 @@ export function IncomingCall() {
             type="button"
             onClick={() => {
               setOpen(false)
+              playSound("callEnd")
               toast("Call declined")
             }}
             className="flex cursor-pointer flex-col items-center gap-2 text-xs text-ink-3"
@@ -86,6 +104,7 @@ export function IncomingCall() {
           </button>
           <Link
             href="/call?type=video&peer=Tanvir%20Rahman"
+            onClick={() => setOpen(false)}
             className="flex cursor-pointer flex-col items-center gap-2 text-xs text-ink-3"
           >
             <span

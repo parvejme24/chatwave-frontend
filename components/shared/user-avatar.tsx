@@ -18,6 +18,7 @@ const presenceClass: Record<Presence, string> = {
 type UserAvatarProps = {
   initials: string
   tone: AvatarTone
+  photo?: string | null
   presence?: Presence
   showPresence?: boolean
   size?: keyof typeof sizes
@@ -27,6 +28,7 @@ type UserAvatarProps = {
 export function UserAvatar({
   initials,
   tone,
+  photo,
   presence,
   showPresence = false,
   size = "md",
@@ -37,11 +39,20 @@ export function UserAvatar({
       className={cn(
         "relative grid shrink-0 place-items-center rounded-full font-display font-semibold select-none",
         sizes[size],
-        AVATAR_TONES[tone],
+        !photo && AVATAR_TONES[tone],
+        photo && "bg-surface-3",
         className
       )}
     >
-      <span className="relative z-[1]">{initials}</span>
+      {photo ? (
+        <img
+          src={photo}
+          alt=""
+          className="absolute inset-0 size-full rounded-full object-cover"
+        />
+      ) : (
+        <span className="relative z-[1]">{initials}</span>
+      )}
       {showPresence && presence ? (
         <i
           className={cn(

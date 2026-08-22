@@ -1,6 +1,8 @@
 "use client"
 
+import { Trash2 } from "lucide-react"
 import { useEffect, useRef } from "react"
+import { toast } from "sonner"
 
 import { CallLog } from "@/components/chats/bubbles/call-log"
 import { FileBubble } from "@/components/chats/bubbles/file-bubble"
@@ -17,7 +19,7 @@ import { SENDER_TONES } from "@/lib/types/chat"
 import { cn } from "@/lib/utils"
 
 export function MessageList({ conversation }: { conversation: Conversation }) {
-  const { toggleReaction } = useChat()
+  const { toggleReaction, deleteMessage } = useChat()
   const endRef = useRef<HTMLDivElement>(null)
   const lastId = conversation.messages.at(-1)?.id
   const lastOutgoing = [...conversation.messages]
@@ -103,7 +105,25 @@ export function MessageList({ conversation }: { conversation: Conversation }) {
                     {item.senderName}
                   </span>
                 ) : null}
-                <MessageBody message={item} outgoing={outgoing} />
+                <div
+                  className={cn(
+                    "group flex items-end gap-1.5",
+                    outgoing && "flex-row-reverse"
+                  )}
+                >
+                  <MessageBody message={item} outgoing={outgoing} />
+                  <button
+                    type="button"
+                    aria-label="Delete message"
+                    onClick={() => {
+                      deleteMessage(conversation.id, item.id)
+                      toast("Message deleted")
+                    }}
+                    className="mb-1 grid size-7 shrink-0 cursor-pointer place-items-center rounded-[8px] text-ink-4 opacity-70 transition-opacity hover:bg-surface-2 hover:text-pulse focus-visible:opacity-100 max-[859px]:opacity-70 min-[860px]:opacity-0 min-[860px]:group-hover:opacity-100 min-[860px]:group-focus-within:opacity-100"
+                  >
+                    <Trash2 className="size-3.5 stroke-[1.75]" aria-hidden />
+                  </button>
+                </div>
                 {item.reactions?.length ? (
                   <div className="flex gap-1 px-1">
                     {item.reactions.map((reaction) => (

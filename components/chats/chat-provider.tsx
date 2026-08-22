@@ -10,11 +10,13 @@ import {
 } from "react"
 
 import { CONVERSATIONS, ME, createConversations } from "@/lib/data/conversations"
+import { playSound } from "@/lib/sounds"
 import type {
   ChatMessage,
   Conversation,
   Me,
   MessageStatus,
+  PreviewIcon,
   RecordKind,
   ThreadItem,
 } from "@/lib/types/chat"
@@ -35,6 +37,7 @@ type ChatContextValue = {
     kind: RecordKind,
     duration: number
   ) => void
+  deleteMessage: (conversationId: string, messageId: string) => void
   toggleReaction: (conversationId: string, messageId: string, emoji: string) => void
   setPinned: (id: string, pinned: boolean) => void
 }
@@ -49,6 +52,57 @@ function patchConversation(
   return list.map((conversation) =>
     conversation.id === id ? updater(conversation) : conversation
   )
+}
+
+function lastMessagePreview(items: ThreadItem[]): {
+  preview: string
+  previewIcon?: PreviewIcon
+  time: string
+} {
+  const last = [...items]
+    .reverse()
+    .find((item): item is ChatMessage => item.kind === "message")
+
+  if (!last) {
+    return { preview: "No messages yet", previewIcon: undefined, time: "" }
+  }
+
+  const prefix = last.dir === "out" ? "You: " : ""
+
+  if (last.type === "voice") {
+    return {
+      preview: `${prefix}Voice message · ${fmtTime(last.duration ?? 0)}`,
+      previewIcon: "mic",
+      time: last.time,
+    }
+  }
+  if (last.type === "video_note") {
+    return {
+      preview: `${prefix}Video message`,
+      previewIcon: "video",
+      time: last.time,
+    }
+  }
+  if (last.type === "image") {
+    return {
+      preview: `${prefix}${last.caption || "Photo"}`,
+      previewIcon: "image",
+      time: last.time,
+    }
+  }
+  if (last.type === "file") {
+    return {
+      preview: `${prefix}${last.fileName || "File"}`,
+      previewIcon: undefined,
+      time: last.time,
+    }
+  }
+
+  return {
+    preview: `${prefix}${last.text || ""}`,
+    previewIcon: undefined,
+    time: last.time,
+  }
 }
 
 function insertBeforeTyping(items: ThreadItem[], item: ThreadItem) {
@@ -120,6 +174,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         }))
       )
 
+      playSound("send")
       window.setTimeout(() => setMessageStatus(conversationId, id, "sent"), 420)
       window.setTimeout(
         () => setMessageStatus(conversationId, id, "delivered"),
@@ -169,6 +224,27 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           messages: insertBeforeTyping(conversation.messages, message),
         }))
       )
+      playSound("send")
+    },
+    []
+  )
+
+  const deleteMessage = useCallback(
+    (conversationId: string, messageId: string) => {
+      setConversations((current) =>
+        patchConversation(current, conversationId, (conversation) => {
+          const messages = conversation.messages.filter(
+            (item) => item.kind !== "message" || item.id !== messageId
+          )
+          return {
+            ...conversation,
+            messages,
+            ...lastMessagePreview(messages),
+          }
+        })
+      )
+      setPlayingVoiceId((current) => (current === messageId ? null : current))
+      playSound("delete")
     },
     []
   )
@@ -220,6 +296,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       clearUnread,
       sendText,
       sendRecording,
+      deleteMessage,
       toggleReaction,
       setPinned,
     }),
@@ -231,6 +308,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       clearUnread,
       sendText,
       sendRecording,
+      deleteMessage,
       toggleReaction,
       setPinned,
     ]

@@ -13,8 +13,8 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useTheme } from "next-themes"
 
+import { useSettings } from "@/components/settings/settings-provider"
 import { UserAvatar } from "@/components/shared/user-avatar"
-import { ME } from "@/lib/data/conversations"
 import { cn } from "@/lib/utils"
 
 const links = [
@@ -32,6 +32,7 @@ function isCurrent(pathname: string, href: string) {
 export function AppRail() {
   const pathname = usePathname()
   const { resolvedTheme, setTheme } = useTheme()
+  const { profile } = useSettings()
 
   return (
     <nav
@@ -99,8 +100,9 @@ export function AppRail() {
 
       <Link href="/settings" aria-label="Your profile" className="mt-1.5">
         <UserAvatar
-          initials={ME.initials}
-          tone={ME.tone}
+          initials={profile.initials}
+          tone={profile.tone}
+          photo={profile.photo}
           presence="online"
           showPresence
           size="sm"
