@@ -5,7 +5,7 @@ import {
   JetBrains_Mono,
 } from "next/font/google"
 
-import { ThemeProvider } from "@/components/theme-provider"
+import { ThemeProvider } from "../providers/theme-provider"
 
 import "./globals.css"
 
@@ -38,7 +38,11 @@ export const metadata: Metadata = {
   },
 }
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
   return (
     <html
       lang="en"

@@ -1,3 +1,3 @@
-import { ChatThreadPage } from "@/components/chats/chat-thread-page"
+import { ChatThreadPage } from "../../../features/chats/chat-thread-page"
 
 export default ChatThreadPage

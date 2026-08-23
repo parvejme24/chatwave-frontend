@@ -1,4 +1,4 @@
-import type { AvatarTone, Presence } from "@/lib/types/chat"
+import type { AvatarTone, Presence } from "./chat"
 
 export type Contact = {
   name: string

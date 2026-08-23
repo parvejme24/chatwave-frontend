@@ -1,9 +1,7 @@
-import { MainLayout } from "@/components/main/main-layout"
-
 export default function CallLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  return <MainLayout>{children}</MainLayout>
+  return children
 }

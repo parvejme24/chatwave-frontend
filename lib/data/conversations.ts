@@ -1,4 +1,4 @@
-import type { Conversation, Me } from "@/lib/types/chat"
+import type { Conversation, Me } from "../types/chat"
 
 export const ME: Me = { name: "Parvej", initials: "PR", tone: "a" }
 
@@ -97,6 +97,14 @@ export const CONVERSATIONS: Conversation[] = [
     time: "1:48 PM",
     unread: 4,
     preview: "Rakib: the waveform seek is smooth now",
+    members: [
+      { id: "me", name: ME.name, initials: ME.initials, tone: ME.tone, presence: "online", isMe: true },
+      { id: "rakib", name: "Rakib Islam", initials: "RI", tone: "c", presence: "online", user: "rakib" },
+      { id: "nadia", name: "Nadia Hasan", initials: "NH", tone: "b", presence: "online", user: "nadia" },
+      { id: "sumaiya", name: "Sumaiya Akter", initials: "SA", tone: "d", presence: "online", user: "sumaiya" },
+      { id: "tanvir", name: "Tanvir Rahman", initials: "TR", tone: "f", presence: "away", user: "tanvir" },
+      { id: "farhan", name: "Farhan Kabir", initials: "FK", tone: "a", presence: "offline", user: "farhan" },
+    ],
     messages: [
       { id: "team-d1", kind: "day", label: "Today" },
       {
@@ -302,6 +310,12 @@ export const CONVERSATIONS: Conversation[] = [
     time: "Mon",
     unread: 0,
     preview: "Nadia: pushed v3 of the composer",
+    members: [
+      { id: "me", name: ME.name, initials: ME.initials, tone: ME.tone, presence: "online", isMe: true },
+      { id: "nadia", name: "Nadia Hasan", initials: "NH", tone: "b", presence: "online", user: "nadia" },
+      { id: "sumaiya", name: "Sumaiya Akter", initials: "SA", tone: "d", presence: "online", user: "sumaiya" },
+      { id: "ishrat", name: "Ishrat Jahan", initials: "IJ", tone: "b", presence: "away", user: "ishrat" },
+    ],
     messages: [
       { id: "design-d1", kind: "day", label: "Monday" },
       {

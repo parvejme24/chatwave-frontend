@@ -52,6 +52,16 @@ export type ChatMessage = {
 
 export type ThreadItem = DayItem | CallItem | TypingItem | ChatMessage
 
+export type GroupMember = {
+  id: string
+  name: string
+  initials: string
+  tone: AvatarTone
+  presence?: Presence
+  user?: string
+  isMe?: boolean
+}
+
 export type Conversation = {
   id: string
   name: string
@@ -66,15 +76,44 @@ export type Conversation = {
   pinned?: boolean
   muted?: boolean
   group?: boolean
+  members?: GroupMember[]
   preview: string
   previewIcon?: PreviewIcon
   messages: ThreadItem[]
 }
 
+export const MIN_GROUP_MEMBERS = 3
+
 export type Me = {
   name: string
   initials: string
   tone: AvatarTone
+}
+
+export type ProfilePerson = {
+  conversationId: string
+  name: string
+  initials: string
+  tone: AvatarTone
+  photo?: string | null
+  presence?: Presence
+  status?: string
+  sub?: string
+  isMe?: boolean
+  group?: boolean
+}
+
+export function personFromConversation(conversation: Conversation): ProfilePerson {
+  return {
+    conversationId: conversation.id,
+    name: conversation.name,
+    initials: conversation.initials,
+    tone: conversation.tone,
+    presence: conversation.presence,
+    status: conversation.status,
+    sub: conversation.sub,
+    group: conversation.group,
+  }
 }
 
 export const AVATAR_TONES: Record<AvatarTone, string> = {

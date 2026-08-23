@@ -1,4 +1,4 @@
-import type { CallFilter, CallRecord, CallSection } from "@/lib/types/call"
+import type { CallFilter, CallRecord, CallSection } from "../types/call"
 
 export const CALL_SECTIONS: CallSection[] = [
   {

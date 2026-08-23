@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
 
-import { CallsPage } from "@/components/calls/calls-page"
+import { CallsPage } from "../../features/calls/calls-page"
 
 export const metadata: Metadata = {
   title: "Calls",

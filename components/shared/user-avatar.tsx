@@ -1,5 +1,5 @@
-import { AVATAR_TONES, type AvatarTone, type Presence } from "@/lib/types/chat"
-import { cn } from "@/lib/utils"
+import { AVATAR_TONES, type AvatarTone, type Presence } from "../../lib/types/chat"
+import { cn } from "../../lib/utils"
 
 const sizes = {
   xs: "size-7 text-[11px]",

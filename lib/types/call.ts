@@ -1,4 +1,4 @@
-import type { AvatarTone, Presence } from "@/lib/types/chat"
+import type { AvatarTone, Presence } from "./chat"
 
 export type CallType = "audio" | "video"
 export type CallStatus = "ended" | "missed" | "declined"

@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
 
-import { ChatsPage } from "@/components/chats/chats-page"
+import { ChatsPage } from "../../features/chats/chats-page"
 
 export const metadata: Metadata = {
   title: "Chats",

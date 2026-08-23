@@ -1,5 +1,5 @@
-import type { AvatarTone } from "@/lib/types/chat"
-import { DEFAULT_SOUND_FAVORITES } from "@/lib/sounds"
+import type { AvatarTone } from "../types/chat"
+import { DEFAULT_SOUND_FAVORITES } from "../sounds"
 
 export type SettingsProfile = {
   name: string
@@ -10,6 +10,7 @@ export type SettingsProfile = {
   initials: string
   tone: AvatarTone
   photo: string | null
+  isOwner?: boolean
 }
 
 export const SETTINGS_PROFILE: SettingsProfile = {
@@ -21,6 +22,11 @@ export const SETTINGS_PROFILE: SettingsProfile = {
   initials: "PR",
   tone: "a",
   photo: null,
+  isOwner: true,
+}
+
+export function isAppOwner(profile: SettingsProfile) {
+  return Boolean(profile.isOwner)
 }
 
 export function profileBio(profile: SettingsProfile) {
