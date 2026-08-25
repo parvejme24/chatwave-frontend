@@ -1,11 +1,10 @@
 "use client"
 
 import { Plus } from "lucide-react"
-import { toast } from "sonner"
+import { useRouter } from "next/navigation"
 
 import { CallRow } from "./call-row"
 import { Button } from "../../components/ui/button"
-import { playSound } from "../../lib/sounds"
 import type { CallRecord, CallSection as CallSectionType } from "../../lib/types/call"
 
 export function CallSection({
@@ -15,6 +14,7 @@ export function CallSection({
   section: CallSectionType
   calls: CallRecord[]
 }) {
+  const router = useRouter()
   if (!calls.length) return null
 
   return (
@@ -30,10 +30,7 @@ export function CallSection({
           <Button
             type="button"
             variant="secondary"
-            onClick={() => {
-              playSound("callStart")
-              toast("Starting a new call")
-            }}
+            onClick={() => router.push("/contacts")}
             className="h-9 gap-1.5 rounded-[14px] border border-edge bg-surface-2 px-3.5 text-[13.5px] font-medium text-ink hover:bg-surface-3"
           >
             <Plus className="size-4 stroke-[1.75]" aria-hidden />

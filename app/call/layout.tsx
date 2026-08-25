@@ -1,7 +1,9 @@
+import { RequireAuth } from "../../features/auth/require-auth"
+
 export default function CallLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  return children
+  return <RequireAuth>{children}</RequireAuth>
 }

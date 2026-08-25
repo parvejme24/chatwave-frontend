@@ -4,12 +4,10 @@ import { useEffect, useState } from "react"
 
 export function useIdleChrome(enabled: boolean, idleMs = 5000) {
   const [visible, setVisible] = useState(true)
+  if (!enabled && !visible) setVisible(true)
 
   useEffect(() => {
-    if (!enabled) {
-      setVisible(true)
-      return
-    }
+    if (!enabled) return
 
     let timer = window.setTimeout(() => setVisible(false), idleMs)
 

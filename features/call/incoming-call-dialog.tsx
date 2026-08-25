@@ -1,28 +1,31 @@
 "use client"
 
 import { motion, useReducedMotion } from "framer-motion"
-import { PhoneOff, Video } from "lucide-react"
-import Link from "next/link"
+import { Phone, PhoneOff, Video } from "lucide-react"
 
 import { SpeakRing } from "./speak-ring"
 import { signalEase } from "../../components/motion/motion-item"
+import type { CallType } from "../../lib/types/call"
 
 export function IncomingCallDialog({
   peer,
   initials,
-  href,
+  kind = "video",
+  busy,
   onDecline,
   onAccept,
   onDismiss,
 }: {
   peer: string
   initials: string
-  href: string
+  kind?: CallType
+  busy?: boolean
   onDecline: () => void
-  onAccept?: () => void
+  onAccept: () => void
   onDismiss?: () => void
 }) {
   const reduceMotion = useReducedMotion()
+  const AcceptIcon = kind === "audio" ? Phone : Video
 
   return (
     <motion.div
@@ -49,7 +52,7 @@ export function IncomingCallDialog({
           <SpeakRing initials={initials} size="sm" />
         </div>
         <p className="mb-1.5 font-mono text-[11px] font-semibold tracking-[0.16em] text-pulse uppercase">
-          Incoming video call
+          Incoming {kind === "audio" ? "voice" : "video"} call
         </p>
         <h3
           id="incoming-call-name"
@@ -61,18 +64,20 @@ export function IncomingCallDialog({
         <div className="mt-[26px] flex justify-center gap-[34px] max-[479px]:gap-[26px]">
           <button
             type="button"
+            disabled={busy}
             onClick={onDecline}
-            className="flex cursor-pointer flex-col items-center gap-2 text-xs text-ink-3"
+            className="flex cursor-pointer flex-col items-center gap-2 text-xs text-ink-3 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <span className="grid size-[58px] place-items-center rounded-full bg-pulse text-white transition-transform hover:scale-105">
               <PhoneOff className="size-6 stroke-[1.75]" aria-hidden />
             </span>
             Decline
           </button>
-          <Link
-            href={href}
+          <button
+            type="button"
+            disabled={busy}
             onClick={onAccept}
-            className="flex cursor-pointer flex-col items-center gap-2 text-xs text-ink-3"
+            className="flex cursor-pointer flex-col items-center gap-2 text-xs text-ink-3 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <motion.span
               className="grid size-[58px] place-items-center rounded-full bg-ok text-white"
@@ -83,10 +88,10 @@ export function IncomingCallDialog({
                   : { duration: 1.5, repeat: Infinity, ease: "easeInOut" }
               }
             >
-              <Video className="size-6 stroke-[1.75]" aria-hidden />
+              <AcceptIcon className="size-6 stroke-[1.75]" aria-hidden />
             </motion.span>
             Accept
-          </Link>
+          </button>
         </div>
       </motion.div>
     </motion.div>

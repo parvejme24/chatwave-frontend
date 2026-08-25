@@ -8,11 +8,13 @@ export function CallStage({
   peer,
   initials,
   localStream,
+  status = "active",
 }: {
   kind: "audio" | "video"
   peer: string
   initials: string
   localStream: MediaStream | null
+  status?: "ringing" | "active" | "ended" | "missed" | "declined" | "connecting"
 }) {
   if (kind === "video") {
     return <VideoStage initials={initials} localStream={localStream} />
@@ -25,7 +27,11 @@ export function CallStage({
         {peer}
       </h2>
       <p className="mt-1.5 text-[13.5px] text-white/50">
-        Connected · encrypted end to end in transit
+        {status === "ringing"
+          ? "Calling…"
+          : status === "active"
+            ? "Connected · encrypted end to end in transit"
+            : "Connecting…"}
       </p>
     </div>
   )

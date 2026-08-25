@@ -5,22 +5,46 @@ import { useMemo, useState } from "react"
 import { CallFilters } from "./call-filters"
 import { CallSection } from "./call-section"
 import { QualityCard } from "./quality-card"
-import { useSettings } from "../settings/settings-provider"
-import { isManagedUserHidden } from "../../lib/data/admin-users"
-import { CALLS, CALL_SECTIONS, filterCalls } from "../../lib/data/calls"
-import type { CallFilter } from "../../lib/types/call"
+import { selectAccessToken } from "../../lib/store/auth-slice"
+import {
+  useGetCallQualityQuery,
+  useGetCallsQuery,
+} from "../../lib/store/calls-api"
+import { useAppSelector } from "../../lib/store/hooks"
+import type { CallFilter, CallSection as CallSectionType } from "../../lib/types/call"
+
+const fallbackSections: CallSectionType[] = [
+  { id: "today", title: "Today", meta: "", showNewCall: true },
+  { id: "yesterday", title: "Yesterday", meta: "" },
+  { id: "older", title: "Older", meta: "" },
+]
 
 export function CallsPage() {
-  const { users, removedUserKeys } = useSettings()
+  const token = useAppSelector(selectAccessToken)
   const [filter, setFilter] = useState<CallFilter>("all")
-  const shown = useMemo(() => {
-    const visible = CALLS.filter(
-      (call) =>
-        call.group ||
-        !isManagedUserHidden(users, removedUserKeys, undefined, call.name)
-    )
-    return filterCalls(visible, filter)
-  }, [filter, removedUserKeys, users])
+  const { data, isFetching, isError } = useGetCallsQuery(
+    { filter },
+    { skip: !token }
+  )
+  const { data: quality } = useGetCallQualityQuery(undefined, { skip: !token })
+  const calls = data?.calls ?? []
+  const sections = useMemo(() => {
+    const fromApi = data?.sections ?? []
+    const known = new Set(fromApi.map((section) => section.id))
+    const extra = [...new Set(calls.map((call) => call.section))]
+      .filter((id) => id && !known.has(id))
+      .map((id) => ({
+        id,
+        title:
+          id === "today" ? "Today" : id === "yesterday" ? "Yesterday" : "Older",
+        meta: "",
+      }))
+    const list = [...fromApi, ...extra]
+    return (list.length ? list : fallbackSections).map((section, index) => ({
+      ...section,
+      showNewCall: index === 0,
+    }))
+  }, [calls, data?.sections])
 
   return (
     <section className="h-dvh overflow-y-auto bg-paper max-[859px]:pb-[calc(74px+env(safe-area-inset-bottom))]">
@@ -36,19 +60,27 @@ export function CallsPage() {
 
         <CallFilters value={filter} onChange={setFilter} />
 
-        {shown.length === 0 ? (
-          <p className="py-10 text-[14.5px] text-ink-3">No calls in this filter.</p>
+        {isFetching && calls.length === 0 ? (
+          <p className="py-10 text-[14.5px] text-ink-3">Loading calls…</p>
+        ) : isError ? (
+          <p className="py-10 text-[14.5px] text-ink-3">
+            Could not load calls. Try again in a moment.
+          </p>
+        ) : calls.length === 0 ? (
+          <p className="py-10 text-[14.5px] text-ink-3">
+            No calls in this filter. Start one from Contacts or a chat.
+          </p>
         ) : (
-          CALL_SECTIONS.map((section) => (
+          sections.map((section) => (
             <CallSection
               key={section.id}
               section={section}
-              calls={shown.filter((call) => call.section === section.id)}
+              calls={calls.filter((call) => call.section === section.id)}
             />
           ))
         )}
 
-        <QualityCard />
+        <QualityCard quality={quality} />
       </div>
     </section>
   )

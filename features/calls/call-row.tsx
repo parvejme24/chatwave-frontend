@@ -19,6 +19,7 @@ export function CallRow({ call }: { call: CallRecord }) {
       <UserAvatar
         initials={call.initials}
         tone={call.tone}
+        photo={call.photoUrl}
         presence={call.presence}
         showPresence={!call.group && Boolean(call.presence)}
       />
@@ -52,7 +53,10 @@ export function CallRow({ call }: { call: CallRecord }) {
           return (
             <Link
               key={action.label}
-              href={action.href}
+              href={
+                action.href ||
+                `/call?type=${action.type}&conversationId=${call.conversationId ?? ""}&peer=${encodeURIComponent(call.name)}`
+              }
               aria-label={action.label}
               className="inline-flex size-10 cursor-pointer items-center justify-center rounded-[11px] text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
             >

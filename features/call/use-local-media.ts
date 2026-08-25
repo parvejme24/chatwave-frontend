@@ -7,7 +7,6 @@ export function useLocalMedia(active: boolean) {
 
   useEffect(() => {
     if (!active || typeof navigator === "undefined" || !navigator.mediaDevices) {
-      setStream(null)
       return
     }
 
