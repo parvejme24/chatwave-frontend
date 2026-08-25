@@ -1,10 +1,12 @@
 import { AuthArt } from "./auth-art"
 import { AuthFormPanel } from "./auth-form-panel"
+import { GuestOnly } from "./guest-only"
 import { MotionItem } from "../../components/motion/motion-item"
 import { SignUpForm } from "./sign-up-form"
 
 export function SignUpPage() {
   return (
+    <GuestOnly>
     <main className="grid min-h-dvh bg-surface lg:grid-cols-2">
       <AuthArt
         eyebrow="New on ChatWave"
@@ -30,5 +32,6 @@ export function SignUpPage() {
         <SignUpForm />
       </AuthFormPanel>
     </main>
+    </GuestOnly>
   )
 }

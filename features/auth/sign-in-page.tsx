@@ -1,10 +1,12 @@
 import { AuthArt } from "./auth-art"
 import { AuthFormPanel } from "./auth-form-panel"
+import { GuestOnly } from "./guest-only"
 import { MotionItem } from "../../components/motion/motion-item"
 import { SignInForm } from "./sign-in-form"
 
 export function SignInPage() {
   return (
+    <GuestOnly>
     <main className="grid min-h-dvh bg-surface lg:grid-cols-2">
       <AuthArt />
       <AuthFormPanel>
@@ -21,5 +23,6 @@ export function SignInPage() {
         <SignInForm />
       </AuthFormPanel>
     </main>
+    </GuestOnly>
   )
 }

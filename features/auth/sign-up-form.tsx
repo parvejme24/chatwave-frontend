@@ -14,7 +14,8 @@ import { Button } from "../../components/ui/button"
 import { Input } from "../../components/ui/input"
 import { Label } from "../../components/ui/label"
 import { Separator } from "../../components/ui/separator"
-import { apiErrorMessage, apiUrl } from "../../lib/api"
+import { useRegisterMutation } from "../../lib/store/auth-api"
+import { mutationErrorMessage } from "../../lib/store/api-error"
 import { signUpSchema, type SignUpValues } from "../../lib/validations/auth"
 
 const inputClassName =
@@ -22,6 +23,7 @@ const inputClassName =
 
 export function SignUpForm() {
   const router = useRouter()
+  const [registerAccount, { isLoading }] = useRegisterMutation()
   const form = useForm<SignUpValues>({
     resolver: zodResolver(signUpSchema),
     defaultValues: { name: "", email: "", password: "" },
@@ -34,7 +36,7 @@ export function SignUpForm() {
     name.trim().length > 0 &&
     email.trim().length > 0 &&
     password.trim().length > 0
-  const isSubmitting = form.formState.isSubmitting
+  const isSubmitting = isLoading || form.formState.isSubmitting
 
   const onInvalid: SubmitErrorHandler<SignUpValues> = (errors) => {
     if (errors.name) {
@@ -55,31 +57,15 @@ export function SignUpForm() {
 
   async function onSubmit(values: SignUpValues) {
     try {
-      const response = await fetch(apiUrl("/api/auth/register"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: values.name,
-          email: values.email,
-          password: values.password,
-        }),
-      })
-
-      const payload = await response.json().catch(() => null)
-
-      if (!response.ok) {
-        toast.error(apiErrorMessage(payload, "Could not create your account"))
-        return
-      }
-
-      sessionStorage.setItem("cw_email", values.email)
-      sessionStorage.setItem("cw_name", values.name)
+      await registerAccount({
+        name: values.name,
+        email: values.email,
+        password: values.password,
+      }).unwrap()
       toast.success("Account created")
       router.push("/sign-in")
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Could not create your account"
-      )
+      toast.error(mutationErrorMessage(error, "Could not create your account"))
     }
   }
 

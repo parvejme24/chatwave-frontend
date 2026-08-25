@@ -14,7 +14,8 @@ import { Button } from "../../components/ui/button"
 import { Input } from "../../components/ui/input"
 import { Label } from "../../components/ui/label"
 import { Separator } from "../../components/ui/separator"
-import { apiErrorMessage, apiUrl } from "../../lib/api"
+import { useLoginMutation } from "../../lib/store/auth-api"
+import { mutationErrorMessage } from "../../lib/store/api-error"
 import { signInSchema, type SignInValues } from "../../lib/validations/auth"
 
 const inputClassName =
@@ -22,6 +23,7 @@ const inputClassName =
 
 export function SignInForm() {
   const router = useRouter()
+  const [login, { isLoading }] = useLoginMutation()
   const form = useForm<SignInValues>({
     resolver: zodResolver(signInSchema),
     defaultValues: { email: "", password: "" },
@@ -30,7 +32,7 @@ export function SignInForm() {
   const email = form.watch("email")
   const password = form.watch("password")
   const isComplete = email.trim().length > 0 && password.trim().length > 0
-  const isSubmitting = form.formState.isSubmitting
+  const isSubmitting = isLoading || form.formState.isSubmitting
 
   const onInvalid: SubmitErrorHandler<SignInValues> = (errors) => {
     if (errors.email) {
@@ -45,27 +47,14 @@ export function SignInForm() {
 
   async function onSubmit(values: SignInValues) {
     try {
-      const response = await fetch(apiUrl("/api/auth/login"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: values.email,
-          password: values.password,
-        }),
-      })
-
-      const payload = await response.json().catch(() => null)
-
-      if (!response.ok) {
-        toast.error(apiErrorMessage(payload, "Could not sign in"))
-        return
-      }
-
-      sessionStorage.setItem("cw_email", values.email)
+      await login({
+        email: values.email,
+        password: values.password,
+      }).unwrap()
       toast.success("Signed in")
       router.push("/chats")
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not sign in")
+      toast.error(mutationErrorMessage(error, "Could not sign in"))
     }
   }
 

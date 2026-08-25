@@ -1,10 +1,12 @@
 import { AuthArt } from "./auth-art"
 import { AuthFormPanel } from "./auth-form-panel"
 import { ForgotPasswordForm } from "./forgot-password-form"
+import { GuestOnly } from "./guest-only"
 import { MotionItem } from "../../components/motion/motion-item"
 
 export function ForgotPasswordPage() {
   return (
+    <GuestOnly>
     <main className="grid min-h-dvh bg-surface lg:grid-cols-2">
       <AuthArt
         eyebrow="Reset access"
@@ -31,5 +33,6 @@ export function ForgotPasswordPage() {
         <ForgotPasswordForm />
       </AuthFormPanel>
     </main>
+    </GuestOnly>
   )
 }

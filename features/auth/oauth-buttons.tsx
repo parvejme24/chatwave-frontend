@@ -4,7 +4,7 @@ import { toast } from "sonner"
 
 import { MotionItem } from "../../components/motion/motion-item"
 import { Button } from "../../components/ui/button"
-import { apiUrl } from "../../lib/api"
+import { remoteApiUrl } from "../../lib/api"
 
 function GoogleMark() {
   return (
@@ -50,7 +50,7 @@ type OAuthButtonsProps = {
 export function OAuthButtons({ disabled }: OAuthButtonsProps) {
   function continueWith(provider: "google" | "github") {
     toast("Redirecting…")
-    window.location.href = apiUrl(`/api/auth/${provider}`)
+    window.location.href = remoteApiUrl(`/api/auth/${provider}`)
   }
 
   return (

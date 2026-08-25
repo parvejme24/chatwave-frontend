@@ -14,7 +14,11 @@ import { MotionItem } from "../../components/motion/motion-item"
 import { Button } from "../../components/ui/button"
 import { Input } from "../../components/ui/input"
 import { Label } from "../../components/ui/label"
-import { apiErrorMessage, apiUrl } from "../../lib/api"
+import {
+  useForgotPasswordMutation,
+  useResetPasswordMutation,
+} from "../../lib/store/auth-api"
+import { mutationErrorMessage } from "../../lib/store/api-error"
 import {
   forgotPasswordSchema,
   resetPasswordSchema,
@@ -29,6 +33,10 @@ const RESET_EMAIL_KEY = "cw_reset_email"
 
 export function ForgotPasswordForm() {
   const router = useRouter()
+  const [forgotPassword, { isLoading: sendingRemote }] =
+    useForgotPasswordMutation()
+  const [resetPassword, { isLoading: resettingRemote }] =
+    useResetPasswordMutation()
   const [email, setEmail] = useState("")
   const [step, setStep] = useState<"email" | "otp">("email")
   const [resending, setResending] = useState(false)
@@ -54,8 +62,8 @@ export function ForgotPasswordForm() {
     password.trim().length > 0 &&
     confirmPassword.trim().length > 0
 
-  const sendingCode = emailForm.formState.isSubmitting
-  const resetting = resetForm.formState.isSubmitting
+  const sendingCode = sendingRemote || emailForm.formState.isSubmitting
+  const resetting = resettingRemote || resetForm.formState.isSubmitting
 
   const onEmailInvalid: SubmitErrorHandler<ForgotPasswordValues> = () => {
     toast.error("Enter a valid email address")
@@ -79,17 +87,7 @@ export function ForgotPasswordForm() {
   }
 
   async function sendCode(address: string) {
-    const response = await fetch(apiUrl("/api/auth/forgot-password"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: address }),
-    })
-
-    const payload = await response.json().catch(() => null)
-
-    if (!response.ok) {
-      throw new Error(apiErrorMessage(payload, "Could not send verification code"))
-    }
+    await forgotPassword({ email: address }).unwrap()
   }
 
   async function onEmailSubmit(values: ForgotPasswordValues) {
@@ -102,37 +100,22 @@ export function ForgotPasswordForm() {
       toast.success("Verification code sent")
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Could not send verification code"
+        mutationErrorMessage(error, "Could not send verification code")
       )
     }
   }
 
   async function onResetSubmit(values: ResetPasswordValues) {
     try {
-      const response = await fetch(apiUrl("/api/auth/reset-password"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email,
-          otp: values.otp,
-          password: values.password,
-        }),
-      })
-
-      const payload = await response.json().catch(() => null)
-
-      if (!response.ok) {
-        toast.error(apiErrorMessage(payload, "Could not reset password"))
-        return
-      }
-
-      sessionStorage.removeItem(RESET_EMAIL_KEY)
+      await resetPassword({
+        email,
+        otp: values.otp,
+        password: values.password,
+      }).unwrap()
       toast.success("Password updated")
       router.push("/sign-in")
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Could not reset password"
-      )
+      toast.error(mutationErrorMessage(error, "Could not reset password"))
     }
   }
 
@@ -144,9 +127,7 @@ export function ForgotPasswordForm() {
       await sendCode(email)
       toast.success("New code sent")
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Could not send a new code"
-      )
+      toast.error(mutationErrorMessage(error, "Could not send a new code"))
     } finally {
       setResending(false)
     }
