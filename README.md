@@ -31,11 +31,14 @@ This UI is a working prototype. Most chat and admin state lives in memory for th
 | UI | React 19, Tailwind CSS v4, shadcn/ui |
 | Motion | Framer Motion |
 | Forms | React Hook Form + Zod |
+| Data | Axios + Redux Toolkit Query |
 | Icons | Lucide |
 | Toasts | Sonner |
 | Theming | next-themes |
 
-Ready for a backend: Axios, TanStack Query, Socket.IO client, NextAuth, Zustand.
+Ready for the rest of the API: Socket.IO client, NextAuth (optional), Zustand.
+
+The auth screens talk to [chatwave-backend](https://chatwave-backend-z7n1.onrender.com/) (`/api/auth/register`, `/login`, `/logout`, `/me`, `/forgot-password`, `/reset-password`, Google/GitHub).
 
 ---
 
@@ -102,8 +105,8 @@ AUTH_SECRET=
 AUTH_URL=http://localhost:3000
 AUTH_TRUST_HOST=true
 
-NEXT_PUBLIC_API_URL=http://localhost:5000
-NEXT_PUBLIC_SOCKET_URL=http://localhost:5000
+NEXT_PUBLIC_API_URL=https://chatwave-backend-z7n1.onrender.com
+NEXT_PUBLIC_SOCKET_URL=https://chatwave-backend-z7n1.onrender.com
 ```
 
 Optional, when you wire a real backend and OAuth:
