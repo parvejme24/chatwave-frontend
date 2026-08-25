@@ -7,9 +7,11 @@ import { cn } from "../../../lib/utils"
 export function FileBubble({
   message,
   outgoing,
+  seenTotal = 0,
 }: {
   message: ChatMessage
   outgoing: boolean
+  seenTotal?: number
 }) {
   return (
     <div
@@ -44,7 +46,7 @@ export function FileBubble({
         </span>
       </div>
       <div className="text-right">
-        <MessageMeta time={message.time} status={message.status} outgoing={outgoing} />
+        <MessageMeta time={message.time} status={message.status} outgoing={outgoing} seenCount={message.seenCount} seenTotal={seenTotal} />
       </div>
     </div>
   )

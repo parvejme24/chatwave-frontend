@@ -1,6 +1,5 @@
 "use client"
 
-import { format } from "date-fns"
 import {
   createContext,
   useCallback,
@@ -9,29 +8,38 @@ import {
   useState,
 } from "react"
 
-import { useSettings } from "../settings/settings-provider"
-import { isManagedUserHidden } from "../../lib/data/admin-users"
-import { CONVERSATIONS, ME, createConversations } from "../../lib/data/conversations"
-import { initialsFromName } from "../../lib/data/settings"
 import { playSound } from "../../lib/sounds"
+import { isBadRequest, mutationErrorMessage } from "../../lib/store/api-error"
+import {
+  useCreateGroupConversationMutation,
+  useGetConversationsQuery,
+  useLeaveConversationMutation,
+  useMarkConversationReadMutation,
+  useRemoveConversationMemberMutation,
+  useSetConversationMemberAdminMutation,
+  useUpdateMembershipMutation,
+} from "../../lib/store/conversations-api"
+import { selectAccessToken, selectAuthUser } from "../../lib/store/auth-slice"
+import { useAppSelector } from "../../lib/store/hooks"
+import {
+  useDeleteMessageMutation,
+  useSendMessageMutation,
+  useToggleMessagePinMutation,
+  useToggleReactionMutation,
+} from "../../lib/store/messages-api"
 import type {
-  AvatarTone,
-  ChatMessage,
   Conversation,
   GroupMember,
   Me,
-  MessageStatus,
-  PreviewIcon,
   ProfilePerson,
   RecordKind,
-  ThreadItem,
 } from "../../lib/types/chat"
 import { MIN_GROUP_MEMBERS } from "../../lib/types/chat"
-import { fmtTime } from "../../lib/waveform"
 
 type ChatContextValue = {
   me: Me
   conversations: Conversation[]
+  conversationsLoading: boolean
   drawerOpen: boolean
   profile: ProfilePerson | null
   setDrawerOpen: (open: boolean) => void
@@ -40,96 +48,75 @@ type ChatContextValue = {
   setPlayingVoiceId: (id: string | null) => void
   getConversation: (id: string) => Conversation | undefined
   clearUnread: (id: string) => void
-  sendText: (conversationId: string, text: string) => void
+  sendText: (conversationId: string, text: string) => Promise<void>
   sendRecording: (
     conversationId: string,
     kind: RecordKind,
-    duration: number
-  ) => void
-  deleteMessage: (conversationId: string, messageId: string) => void
-  toggleReaction: (conversationId: string, messageId: string, emoji: string) => void
-  setPinned: (id: string, pinned: boolean) => void
-  createGroup: (name: string, members: GroupMember[]) => string
+    payload: { file: File; duration: number }
+  ) => Promise<void>
+  deleteMessage: (conversationId: string, messageId: string) => Promise<void>
+  toggleReaction: (
+    conversationId: string,
+    messageId: string,
+    emoji: string
+  ) => Promise<void>
+  togglePinMessage: (conversationId: string, messageId: string) => Promise<void>
+  setPinned: (id: string, pinned: boolean) => Promise<void>
+  setMuted: (id: string, muted: boolean) => Promise<void>
+  setArchived: (id: string, archived: boolean) => Promise<void>
+  createGroup: (name: string, members: GroupMember[]) => Promise<string>
+  removeGroupMember: (conversationId: string, memberId: string) => Promise<boolean>
+  setGroupAdmin: (
+    conversationId: string,
+    memberId: string,
+    isAdmin: boolean
+  ) => Promise<boolean>
+  leaveGroup: (conversationId: string) => Promise<boolean>
+  searchFocusNonce: number
+  requestConversationSearch: () => void
 }
 
 const ChatContext = createContext<ChatContextValue | null>(null)
 
-function patchConversation(
-  list: Conversation[],
-  id: string,
-  updater: (conversation: Conversation) => Conversation
-) {
-  return list.map((conversation) =>
-    conversation.id === id ? updater(conversation) : conversation
-  )
-}
-
-function lastMessagePreview(items: ThreadItem[]): {
-  preview: string
-  previewIcon?: PreviewIcon
-  time: string
-} {
-  const last = [...items]
-    .reverse()
-    .find((item): item is ChatMessage => item.kind === "message")
-
-  if (!last) {
-    return { preview: "No messages yet", previewIcon: undefined, time: "" }
-  }
-
-  const prefix = last.dir === "out" ? "You: " : ""
-
-  if (last.type === "voice") {
-    return {
-      preview: `${prefix}Voice message · ${fmtTime(last.duration ?? 0)}`,
-      previewIcon: "mic",
-      time: last.time,
-    }
-  }
-  if (last.type === "video_note") {
-    return {
-      preview: `${prefix}Video message`,
-      previewIcon: "video",
-      time: last.time,
-    }
-  }
-  if (last.type === "image") {
-    return {
-      preview: `${prefix}${last.caption || "Photo"}`,
-      previewIcon: "image",
-      time: last.time,
-    }
-  }
-  if (last.type === "file") {
-    return {
-      preview: `${prefix}${last.fileName || "File"}`,
-      previewIcon: undefined,
-      time: last.time,
-    }
-  }
-
-  return {
-    preview: `${prefix}${last.text || ""}`,
-    previewIcon: undefined,
-    time: last.time,
-  }
-}
-
-function insertBeforeTyping(items: ThreadItem[], item: ThreadItem) {
-  const next = [...items]
-  const typingIndex = next.findIndex((entry) => entry.kind === "typing")
-  if (typingIndex > -1) next.splice(typingIndex, 0, item)
-  else next.push(item)
-  return next
-}
+const FALLBACK_ME: Me = { name: "You", initials: "Y", tone: "a" }
 
 export function ChatProvider({ children }: { children: React.ReactNode }) {
-  const { users, removedUserKeys } = useSettings()
-  const [conversations, setConversations] = useState<Conversation[]>(() =>
-    createConversations()
+  const user = useAppSelector(selectAuthUser)
+  const token = useAppSelector(selectAccessToken)
+  const { data, isFetching } = useGetConversationsQuery(
+    { filter: "all" },
+    { skip: !token }
+  )
+  const [sendMessage] = useSendMessageMutation()
+  const [deleteMessageMut] = useDeleteMessageMutation()
+  const [toggleReactionMut] = useToggleReactionMutation()
+  const [togglePinMut] = useToggleMessagePinMutation()
+  const [updateMembership] = useUpdateMembershipMutation()
+  const [markRead] = useMarkConversationReadMutation()
+  const [createGroupMut] = useCreateGroupConversationMutation()
+  const [removeMemberMut] = useRemoveConversationMemberMutation()
+  const [setAdminMut] = useSetConversationMemberAdminMutation()
+  const [leaveMut] = useLeaveConversationMutation()
+
+  const conversations = useMemo(
+    () => data?.conversations ?? [],
+    [data?.conversations]
   )
   const [drawerOpen, setDrawerOpenState] = useState(false)
   const [profile, setProfile] = useState<ProfilePerson | null>(null)
+  const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null)
+  const [searchFocusNonce, setSearchFocusNonce] = useState(0)
+
+  const me = useMemo<Me>(() => {
+    if (!user) return FALLBACK_ME
+    return {
+      id: user.id,
+      name: user.name,
+      initials: user.initials,
+      tone: user.tone,
+      photoUrl: user.photoUrl,
+    }
+  }, [user])
 
   const setDrawerOpen = useCallback((open: boolean) => {
     setDrawerOpenState(open)
@@ -140,269 +127,182 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     setProfile(person)
     setDrawerOpenState(true)
   }, [])
-  const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null)
 
-  const visibleConversations = useMemo(() => {
-    return conversations
-      .filter((conversation) => {
-        if (conversation.group) return true
-        return !isManagedUserHidden(
-          users,
-          removedUserKeys,
-          conversation.id,
-          conversation.name
-        )
-      })
-      .map((conversation) => {
-        if (!conversation.members) return conversation
-        return {
-          ...conversation,
-          members: conversation.members.filter(
-            (member) =>
-              member.isMe ||
-              !isManagedUserHidden(
-                users,
-                removedUserKeys,
-                member.id,
-                member.name
-              )
-          ),
-        }
-      })
-  }, [conversations, removedUserKeys, users])
+  const requestConversationSearch = useCallback(() => {
+    setSearchFocusNonce((current) => current + 1)
+    setDrawerOpen(false)
+  }, [setDrawerOpen])
 
   const getConversation = useCallback(
-    (id: string) =>
-      visibleConversations.find((conversation) => conversation.id === id),
-    [visibleConversations]
+    (id: string) => conversations.find((conversation) => conversation.id === id),
+    [conversations]
   )
 
-  const clearUnread = useCallback((id: string) => {
-    setConversations((current) =>
-      patchConversation(current, id, (conversation) => ({
-        ...conversation,
-        unread: 0,
-      }))
-    )
-  }, [])
-
-  const setMessageStatus = useCallback(
-    (conversationId: string, messageId: string, status: MessageStatus) => {
-      setConversations((current) =>
-        patchConversation(current, conversationId, (conversation) => ({
-          ...conversation,
-          messages: conversation.messages.map((item) =>
-            item.kind === "message" && item.id === messageId
-              ? { ...item, status }
-              : item
-          ),
-        }))
-      )
+  const clearUnread = useCallback(
+    (id: string) => {
+      void markRead(id)
     },
-    []
+    [markRead]
   )
 
   const sendText = useCallback(
-    (conversationId: string, text: string) => {
-      const time = format(new Date(), "h:mm a")
-      const id = `${conversationId}-${Date.now()}`
-      const message: ChatMessage = {
-        id,
-        kind: "message",
-        dir: "out",
+    async (conversationId: string, text: string) => {
+      playSound("send")
+      await sendMessage({
+        conversationId,
         type: "text",
         text,
-        time,
-        status: "sending",
-      }
-
-      setConversations((current) =>
-        patchConversation(current, conversationId, (conversation) => ({
-          ...conversation,
-          preview: `You: ${text}`,
-          previewIcon: undefined,
-          time,
-          messages: insertBeforeTyping(conversation.messages, message),
-        }))
-      )
-
-      playSound("send")
-      window.setTimeout(() => setMessageStatus(conversationId, id, "sent"), 420)
-      window.setTimeout(
-        () => setMessageStatus(conversationId, id, "delivered"),
-        1100
-      )
-      window.setTimeout(() => setMessageStatus(conversationId, id, "seen"), 2600)
+      }).unwrap()
     },
-    [setMessageStatus]
+    [sendMessage]
   )
 
   const sendRecording = useCallback(
-    (conversationId: string, kind: RecordKind, duration: number) => {
-      const time = format(new Date(), "h:mm a")
-      const id = `${conversationId}-${Date.now()}`
-      const dur = Math.max(1, Math.round(duration))
-      const message: ChatMessage =
-        kind === "voice"
-          ? {
-              id,
-              kind: "message",
-              dir: "out",
-              type: "voice",
-              duration: dur,
-              seed: Math.floor(Math.random() * 900) + 20,
-              time,
-              status: "sent",
-            }
-          : {
-              id,
-              kind: "message",
-              dir: "out",
-              type: "video_note",
-              duration: dur,
-              time,
-              status: "sent",
-            }
-
-      setConversations((current) =>
-        patchConversation(current, conversationId, (conversation) => ({
-          ...conversation,
-          preview:
-            kind === "voice"
-              ? `You: Voice message · ${fmtTime(dur)}`
-              : "You: Video message",
-          previewIcon: kind === "voice" ? "mic" : "video",
-          time,
-          messages: insertBeforeTyping(conversation.messages, message),
-        }))
-      )
+    async (
+      conversationId: string,
+      kind: RecordKind,
+      payload: { file: File; duration: number }
+    ) => {
       playSound("send")
+      const types =
+        kind === "voice"
+          ? (["voice", "audio"] as const)
+          : (["video_note", "video"] as const)
+      let lastError: unknown
+      for (const type of types) {
+        try {
+          await sendMessage({
+            conversationId,
+            type,
+            file: payload.file,
+            duration: payload.duration,
+          }).unwrap()
+          return
+        } catch (error) {
+          lastError = error
+          if (type === types[types.length - 1] || !isBadRequest(error)) {
+            throw error
+          }
+        }
+      }
+      throw lastError
     },
-    []
+    [sendMessage]
   )
 
   const deleteMessage = useCallback(
-    (conversationId: string, messageId: string) => {
-      setConversations((current) =>
-        patchConversation(current, conversationId, (conversation) => {
-          const messages = conversation.messages.filter(
-            (item) => item.kind !== "message" || item.id !== messageId
-          )
-          return {
-            ...conversation,
-            messages,
-            ...lastMessagePreview(messages),
-          }
-        })
-      )
+    async (conversationId: string, messageId: string) => {
+      await deleteMessageMut({
+        conversationId,
+        messageId,
+        scope: "me",
+      }).unwrap()
       setPlayingVoiceId((current) => (current === messageId ? null : current))
       playSound("delete")
     },
-    []
+    [deleteMessageMut]
   )
 
   const toggleReaction = useCallback(
-    (conversationId: string, messageId: string, emoji: string) => {
-      setConversations((current) =>
-        patchConversation(current, conversationId, (conversation) => ({
-          ...conversation,
-          messages: conversation.messages.map((item) => {
-            if (item.kind !== "message" || item.id !== messageId) return item
-            return {
-              ...item,
-              reactions: (item.reactions ?? []).map((reaction) =>
-                reaction.emoji === emoji
-                  ? {
-                      ...reaction,
-                      mine: !reaction.mine,
-                      count: reaction.count + (reaction.mine ? -1 : 1),
-                    }
-                  : reaction
-              ),
-            }
-          }),
-        }))
-      )
+    async (conversationId: string, messageId: string, emoji: string) => {
+      await toggleReactionMut({ conversationId, messageId, emoji }).unwrap()
     },
-    []
+    [toggleReactionMut]
   )
 
-  const setPinned = useCallback((id: string, pinned: boolean) => {
-    setConversations((current) =>
-      patchConversation(current, id, (conversation) => ({
-        ...conversation,
-        pinned,
-      }))
-    )
-  }, [])
+  const togglePinMessage = useCallback(
+    async (conversationId: string, messageId: string) => {
+      await togglePinMut({ conversationId, messageId }).unwrap()
+    },
+    [togglePinMut]
+  )
 
-  const createGroup = useCallback((name: string, members: GroupMember[]) => {
-    const title = name.trim()
-    if (!title) {
-      throw new Error("Group name is required")
-    }
-    if (members.length < MIN_GROUP_MEMBERS) {
-      throw new Error(`Select at least ${MIN_GROUP_MEMBERS} people`)
-    }
+  const setPinned = useCallback(
+    async (id: string, pinned: boolean) => {
+      await updateMembership({ conversationId: id, pinned }).unwrap()
+    },
+    [updateMembership]
+  )
 
-    const time = format(new Date(), "h:mm a")
-    const slug = title
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, 20)
-    const id = `g-${slug || "group"}-${Date.now().toString(36)}`
-    const tones: AvatarTone[] = ["a", "b", "c", "d", "e", "f"]
-    const tone = tones[title.length % tones.length]
-    const meMember: GroupMember = {
-      id: "me",
-      name: ME.name,
-      initials: ME.initials,
-      tone: ME.tone,
-      presence: "online",
-      isMe: true,
-    }
-    const roster = [meMember, ...members]
-    const count = roster.length
-    const conversation: Conversation = {
-      id,
-      name: title,
-      initials: initialsFromName(title),
-      tone,
-      group: true,
-      presence: "online",
-      status: `${count} members`,
-      live: false,
-      sub: `${count} members · Created just now`,
-      time,
-      unread: 0,
-      members: roster,
-      preview: "You created this group",
-      messages: [
-        { id: `${id}-d1`, kind: "day", label: "Today" },
-        {
-          id: `${id}-1`,
-          kind: "message",
-          dir: "out",
-          type: "text",
-          text: `You created “${title}” with ${members.length} ${
-            members.length === 1 ? "person" : "people"
-          }.`,
-          time,
-          status: "seen",
-        },
-      ],
-    }
+  const setMuted = useCallback(
+    async (id: string, muted: boolean) => {
+      await updateMembership({ conversationId: id, muted }).unwrap()
+    },
+    [updateMembership]
+  )
 
-    setConversations((current) => [conversation, ...current])
-    playSound("send")
-    return id
-  }, [])
+  const setArchived = useCallback(
+    async (id: string, archived: boolean) => {
+      await updateMembership({ conversationId: id, archived }).unwrap()
+    },
+    [updateMembership]
+  )
+
+  const removeGroupMember = useCallback(
+    async (conversationId: string, memberId: string) => {
+      try {
+        await removeMemberMut({ conversationId, userId: memberId }).unwrap()
+        playSound("delete")
+        return true
+      } catch {
+        return false
+      }
+    },
+    [removeMemberMut]
+  )
+
+  const setGroupAdmin = useCallback(
+    async (conversationId: string, memberId: string, nextAdmin: boolean) => {
+      try {
+        await setAdminMut({
+          conversationId,
+          userId: memberId,
+          isAdmin: nextAdmin,
+        }).unwrap()
+        return true
+      } catch {
+        return false
+      }
+    },
+    [setAdminMut]
+  )
+
+  const leaveGroup = useCallback(
+    async (conversationId: string) => {
+      try {
+        await leaveMut(conversationId).unwrap()
+        setDrawerOpen(false)
+        playSound("delete")
+        return true
+      } catch {
+        return false
+      }
+    },
+    [leaveMut, setDrawerOpen]
+  )
+
+  const createGroup = useCallback(
+    async (name: string, members: GroupMember[]) => {
+      const title = name.trim()
+      if (!title) {
+        throw new Error("Group name is required")
+      }
+      if (members.length < MIN_GROUP_MEMBERS) {
+        throw new Error(`Select at least ${MIN_GROUP_MEMBERS} people`)
+      }
+      const memberIds = members.map((member) => member.id).filter(Boolean)
+      const created = await createGroupMut({ name: title, memberIds }).unwrap()
+      playSound("send")
+      return created.id
+    },
+    [createGroupMut]
+  )
 
   const value = useMemo(
     () => ({
-      me: ME,
-      conversations: visibleConversations,
+      me,
+      conversations,
+      conversationsLoading: isFetching && conversations.length === 0,
       drawerOpen,
       profile,
       setDrawerOpen,
@@ -415,14 +315,25 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       sendRecording,
       deleteMessage,
       toggleReaction,
+      togglePinMessage,
       setPinned,
+      setMuted,
+      setArchived,
       createGroup,
+      removeGroupMember,
+      setGroupAdmin,
+      leaveGroup,
+      searchFocusNonce,
+      requestConversationSearch,
     }),
     [
-      visibleConversations,
+      me,
+      conversations,
+      isFetching,
       drawerOpen,
       profile,
       playingVoiceId,
+      searchFocusNonce,
       getConversation,
       clearUnread,
       sendText,
@@ -431,8 +342,15 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       setDrawerOpen,
       openProfile,
       toggleReaction,
+      togglePinMessage,
       setPinned,
+      setMuted,
+      setArchived,
       createGroup,
+      removeGroupMember,
+      setGroupAdmin,
+      leaveGroup,
+      requestConversationSearch,
     ]
   )
 
@@ -447,4 +365,7 @@ export function useChat() {
   return context
 }
 
-export const DEFAULT_CHAT_ID = CONVERSATIONS[0].id
+export function chatActionError(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message) return error.message
+  return mutationErrorMessage(error, fallback)
+}

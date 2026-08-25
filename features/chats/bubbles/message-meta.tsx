@@ -7,10 +7,14 @@ export function MessageMeta({
   time,
   status,
   outgoing,
+  seenCount = 0,
+  seenTotal = 0,
 }: {
   time: string
   status?: MessageStatus
   outgoing?: boolean
+  seenCount?: number
+  seenTotal?: number
 }) {
   return (
     <span
@@ -20,26 +24,61 @@ export function MessageMeta({
       )}
     >
       {time}
-      {outgoing ? <StatusTick status={status} /> : null}
+      {outgoing ? (
+        <StatusLabel
+          status={status}
+          seenCount={seenCount}
+          seenTotal={seenTotal}
+        />
+      ) : null}
     </span>
   )
 }
 
-function StatusTick({ status }: { status?: MessageStatus }) {
-  if (!status) return null
-  if (status === "sending") {
-    return <Clock className="size-[15px] stroke-[2.1]" aria-hidden />
+function StatusLabel({
+  status,
+  seenCount,
+  seenTotal,
+}: {
+  status?: MessageStatus
+  seenCount: number
+  seenTotal: number
+}) {
+  if (!status) {
+    return (
+      <span className="inline-flex items-center gap-1">
+        <Check className="size-[13px] stroke-[2.1]" aria-hidden />
+        Sent
+      </span>
+    )
   }
-  if (status === "sent") {
-    return <Check className="size-[15px] stroke-[2.1]" aria-hidden />
+  if (status === "sending") {
+    return (
+      <span className="inline-flex items-center gap-1">
+        <Clock className="size-[13px] stroke-[2.1]" aria-hidden />
+        Sending...
+      </span>
+    )
+  }
+  if (status === "seen") {
+    const count = Math.max(1, seenCount)
+    const label =
+      seenTotal > 1 ? `Seen ${count}/${seenTotal}` : `Seen ${count}`
+    return (
+      <span className="inline-flex items-center gap-1 text-[#9BE8FF] dark:text-[#7FDBFF]">
+        <CheckCheck className="size-[13px] stroke-[2.1]" aria-hidden />
+        {label}
+      </span>
+    )
   }
   return (
-    <CheckCheck
-      className={cn(
-        "size-[15px] stroke-[2.1]",
-        status === "seen" && "text-[#9BE8FF] dark:text-[#7FDBFF]"
+    <span className="inline-flex items-center gap-1">
+      {status === "delivered" ? (
+        <CheckCheck className="size-[13px] stroke-[2.1]" aria-hidden />
+      ) : (
+        <Check className="size-[13px] stroke-[2.1]" aria-hidden />
       )}
-      aria-hidden
-    />
+      Sent
+    </span>
   )
 }

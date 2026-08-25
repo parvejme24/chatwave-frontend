@@ -7,9 +7,11 @@ import { cn } from "../../../lib/utils"
 export function ImageBubble({
   message,
   outgoing,
+  seenTotal = 0,
 }: {
   message: ChatMessage
   outgoing: boolean
+  seenTotal?: number
 }) {
   return (
     <div
@@ -21,13 +23,22 @@ export function ImageBubble({
       )}
     >
       <div className="overflow-hidden rounded-[15px]">
-        <div className="grid aspect-4/3 w-full place-items-center bg-linear-to-br from-[#C8D4E4] to-[#A8BBD1] text-white/90 dark:from-[#2B3648] dark:to-[#1E2733]">
-          <ImageIcon className="size-7 stroke-[1.75]" aria-hidden />
-        </div>
+        {message.mediaUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={message.mediaUrl}
+            alt={message.caption || "Photo"}
+            className="aspect-4/3 w-full object-cover"
+          />
+        ) : (
+          <div className="grid aspect-4/3 w-full place-items-center bg-linear-to-br from-[#C8D4E4] to-[#A8BBD1] text-white/90 dark:from-[#2B3648] dark:to-[#1E2733]">
+            <ImageIcon className="size-7 stroke-[1.75]" aria-hidden />
+          </div>
+        )}
       </div>
       <div className="px-[9px] pt-[7px] pb-0.5 text-[14.5px] leading-[1.48]">
         {message.caption}
-        <MessageMeta time={message.time} status={message.status} outgoing={outgoing} />
+        <MessageMeta time={message.time} status={message.status} outgoing={outgoing} seenCount={message.seenCount} seenTotal={seenTotal} />
       </div>
     </div>
   )

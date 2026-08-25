@@ -6,17 +6,16 @@ import { useRouter } from "next/navigation"
 import { useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 
-import { useChat } from "./chat-provider"
+import { chatActionError, useChat } from "./chat-provider"
 import { IconBtn } from "../../components/layout/icon-btn"
 import { signalEase } from "../../components/motion/motion-item"
-import { useSettings } from "../settings/settings-provider"
 import { UserAvatar } from "../../components/shared/user-avatar"
 import { Input } from "../../components/ui/input"
-import { isManagedUserHidden } from "../../lib/data/admin-users"
-import { CONTACTS, filterContacts } from "../../lib/data/contacts"
+import { useDebouncedValue } from "../../lib/hooks/use-debounced-value"
 import { useMediaQuery } from "../../lib/hooks/use-media-query"
+import { useGetContactsQuery } from "../../lib/store/contacts-api"
 import { MIN_GROUP_MEMBERS, type GroupMember } from "../../lib/types/chat"
-import { contactInitials, type Contact } from "../../lib/types/contact"
+import { contactFromDto, contactInitials, type Contact } from "../../lib/types/contact"
 import { cn } from "../../lib/utils"
 
 export function CreateGroupDialog({
@@ -28,12 +27,26 @@ export function CreateGroupDialog({
 }) {
   const router = useRouter()
   const { createGroup } = useChat()
-  const { users, removedUserKeys } = useSettings()
   const reduceMotion = useReducedMotion()
   const isMobile = useMediaQuery("(max-width: 859px)")
   const [name, setName] = useState("")
   const [query, setQuery] = useState("")
   const [selected, setSelected] = useState<Contact[]>([])
+  const [saving, setSaving] = useState(false)
+  const [wasOpen, setWasOpen] = useState(open)
+  if (open !== wasOpen) {
+    setWasOpen(open)
+    if (!open) {
+      setName("")
+      setQuery("")
+      setSelected([])
+    }
+  }
+  const debounced = useDebouncedValue(query.trim(), 300)
+  const { data: list, isFetching } = useGetContactsQuery(
+    { q: debounced },
+    { skip: !open }
+  )
 
   useEffect(() => {
     if (!open) return
@@ -46,46 +59,26 @@ export function CreateGroupDialog({
     return () => window.removeEventListener("keydown", onKey)
   }, [open, onClose])
 
-  useEffect(() => {
-    if (open) return
-    setName("")
-    setQuery("")
-    setSelected([])
-  }, [open])
-
-  const people = useMemo(() => {
-    const available = CONTACTS.filter(
-      (contact) =>
-        !isManagedUserHidden(users, removedUserKeys, contact.user, contact.name)
-    )
-    return filterContacts(available, query)
-  }, [query, removedUserKeys, users])
-
-  useEffect(() => {
-    setSelected((current) =>
-      current.filter(
-        (contact) =>
-          !isManagedUserHidden(
-            users,
-            removedUserKeys,
-            contact.user,
-            contact.name
-          )
-      )
-    )
-  }, [removedUserKeys, users])
+  const people = useMemo(
+    () => (list?.contacts ?? []).map(contactFromDto),
+    [list]
+  )
   const ready = name.trim().length > 0 && selected.length >= MIN_GROUP_MEMBERS
   const needed = Math.max(0, MIN_GROUP_MEMBERS - selected.length)
 
+  function contactKey(contact: Contact) {
+    return contact.id ?? contact.user
+  }
+
   function toggle(contact: Contact) {
     setSelected((current) =>
-      current.some((item) => item.user === contact.user)
-        ? current.filter((item) => item.user !== contact.user)
+      current.some((item) => contactKey(item) === contactKey(contact))
+        ? current.filter((item) => contactKey(item) !== contactKey(contact))
         : [...current, contact]
     )
   }
 
-  function create() {
+  async function create() {
     if (!name.trim()) {
       toast("Give the group a name")
       return
@@ -96,18 +89,25 @@ export function CreateGroupDialog({
     }
 
     const members: GroupMember[] = selected.map((contact) => ({
-      id: contact.user,
+      id: contact.id ?? contact.user,
       name: contact.name,
-      initials: contactInitials(contact.name),
+      initials: contact.initials ?? contactInitials(contact.name),
       tone: contact.tone,
       presence: contact.presence,
       user: contact.user,
     }))
 
-    const id = createGroup(name, members)
-    toast(`Created ${name.trim()}`)
-    onClose()
-    router.push(`/chats/${id}`)
+    setSaving(true)
+    try {
+      const id = await createGroup(name, members)
+      toast(`Created ${name.trim()}`)
+      onClose()
+      router.push(`/chats/${id}`)
+    } catch (error) {
+      toast.error(chatActionError(error, "Could not create group"))
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -161,11 +161,11 @@ export function CreateGroupDialog({
               </div>
               <button
                 type="button"
-                disabled={!ready}
-                onClick={create}
+                disabled={!ready || saving}
+                onClick={() => void create()}
                 className="h-9 cursor-pointer rounded-[11px] bg-signal px-3.5 text-[13.5px] font-semibold text-white transition-transform hover:bg-signal-deep disabled:cursor-not-allowed disabled:bg-edge-2 disabled:text-ink-4"
               >
-                Create
+                {saving ? "Creating…" : "Create"}
               </button>
             </header>
 
@@ -202,7 +202,7 @@ export function CreateGroupDialog({
               <div className="flex shrink-0 gap-2 overflow-x-auto px-4 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 {selected.map((contact) => (
                   <button
-                    key={contact.user}
+                    key={contactKey(contact)}
                     type="button"
                     onClick={() => toggle(contact)}
                     aria-label={`Remove ${contact.name}`}
@@ -210,8 +210,9 @@ export function CreateGroupDialog({
                   >
                     <span className="relative">
                       <UserAvatar
-                        initials={contactInitials(contact.name)}
+                        initials={contact.initials ?? contactInitials(contact.name)}
                         tone={contact.tone}
+                        photo={contact.photo}
                         size="sm"
                       />
                       <i className="absolute -right-0.5 -bottom-0.5 grid size-4 place-items-center rounded-full bg-ink text-paper">
@@ -227,16 +228,24 @@ export function CreateGroupDialog({
             ) : null}
 
             <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
-              {people.length === 0 ? (
+              {isFetching && people.length === 0 ? (
                 <p className="px-3 py-10 text-center text-sm text-ink-3">
-                  No one matches “{query.trim()}”.
+                  Searching…
+                </p>
+              ) : people.length === 0 ? (
+                <p className="px-3 py-10 text-center text-sm text-ink-3">
+                  {query.trim()
+                    ? `No contact matches “${query.trim()}”.`
+                    : "Add people from Contacts first."}
                 </p>
               ) : (
                 people.map((contact) => {
-                  const on = selected.some((item) => item.user === contact.user)
+                  const on = selected.some(
+                    (item) => contactKey(item) === contactKey(contact)
+                  )
                   return (
                     <button
-                      key={contact.user}
+                      key={contactKey(contact)}
                       type="button"
                       aria-pressed={on}
                       onClick={() => toggle(contact)}
@@ -246,8 +255,11 @@ export function CreateGroupDialog({
                       )}
                     >
                       <UserAvatar
-                        initials={contactInitials(contact.name)}
+                        initials={
+                          contact.initials ?? contactInitials(contact.name)
+                        }
                         tone={contact.tone}
+                        photo={contact.photo}
                         presence={contact.presence}
                         showPresence
                       />

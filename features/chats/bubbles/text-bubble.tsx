@@ -5,9 +5,11 @@ import { cn } from "../../../lib/utils"
 export function TextBubble({
   message,
   outgoing,
+  seenTotal = 0,
 }: {
   message: ChatMessage
   outgoing: boolean
+  seenTotal?: number
 }) {
   return (
     <div
@@ -32,7 +34,7 @@ export function TextBubble({
         </span>
       ) : null}
       {message.text}
-      <MessageMeta time={message.time} status={message.status} outgoing={outgoing} />
+      <MessageMeta time={message.time} status={message.status} outgoing={outgoing} seenCount={message.seenCount} seenTotal={seenTotal} />
     </div>
   )
 }

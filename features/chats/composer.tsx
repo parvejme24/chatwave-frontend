@@ -2,27 +2,65 @@
 
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { Mic, Paperclip, Send, Smile, Video } from "lucide-react"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, useSyncExternalStore } from "react"
 import { toast } from "sonner"
 
 import { EmojiPicker } from "./emoji-picker"
 import { IconBtn } from "../../components/layout/icon-btn"
-import { useChat } from "./chat-provider"
+import { chatActionError, useChat } from "./chat-provider"
 import { Recorder } from "./recorder"
 import { signalEase } from "../../components/motion/motion-item"
 import { playSound } from "../../lib/sounds"
+import { emitTyping } from "../../lib/realtime/socket"
+import { selectSocketConnected } from "../../lib/store/realtime-slice"
+import { useAppSelector } from "../../lib/store/hooks"
 import type { RecordKind } from "../../lib/types/chat"
 import { cn } from "../../lib/utils"
 
+function subscribeOnline(onStoreChange: () => void) {
+  window.addEventListener("online", onStoreChange)
+  window.addEventListener("offline", onStoreChange)
+  return () => {
+    window.removeEventListener("online", onStoreChange)
+    window.removeEventListener("offline", onStoreChange)
+  }
+}
+
 export function Composer({ conversationId }: { conversationId: string }) {
   const { sendText, sendRecording } = useChat()
+  const socketConnected = useAppSelector(selectSocketConnected)
   const [value, setValue] = useState("")
   const [recording, setRecording] = useState<RecordKind | null>(null)
-  const [online, setOnline] = useState(true)
+  const online = useSyncExternalStore(
+    subscribeOnline,
+    () => navigator.onLine,
+    () => true
+  )
   const [emojiOpen, setEmojiOpen] = useState(false)
   const reduceMotion = useReducedMotion()
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
+  const typingStop = useRef<number>(0)
+
+  function pulseTyping(next: string) {
+    if (next.trim()) {
+      emitTyping(conversationId, true)
+      window.clearTimeout(typingStop.current)
+      typingStop.current = window.setTimeout(() => {
+        emitTyping(conversationId, false)
+      }, 1500)
+    } else {
+      window.clearTimeout(typingStop.current)
+      emitTyping(conversationId, false)
+    }
+  }
+
+  useEffect(() => {
+    return () => {
+      window.clearTimeout(typingStop.current)
+      emitTyping(conversationId, false)
+    }
+  }, [conversationId])
 
   useEffect(() => {
     const el = inputRef.current
@@ -30,21 +68,6 @@ export function Composer({ conversationId }: { conversationId: string }) {
     el.style.height = "auto"
     el.style.height = `${Math.min(el.scrollHeight, 148)}px`
   }, [value])
-
-  useEffect(() => {
-    const goOffline = () => setOnline(false)
-    const goOnline = () => {
-      setOnline(true)
-      toast("Back online — queued messages sent")
-    }
-    window.addEventListener("offline", goOffline)
-    window.addEventListener("online", goOnline)
-    setOnline(navigator.onLine)
-    return () => {
-      window.removeEventListener("offline", goOffline)
-      window.removeEventListener("online", goOnline)
-    }
-  }, [])
 
   useEffect(() => {
     if (!emojiOpen) return
@@ -64,11 +87,18 @@ export function Composer({ conversationId }: { conversationId: string }) {
     }
   }, [emojiOpen])
 
-  function send() {
+  async function send() {
     const text = value.trim()
     if (!text) return
-    sendText(conversationId, text)
+    window.clearTimeout(typingStop.current)
+    emitTyping(conversationId, false)
     setValue("")
+    try {
+      await sendText(conversationId, text)
+    } catch (error) {
+      setValue(text)
+      toast.error(chatActionError(error, "Could not send message"))
+    }
   }
 
   function insertEmoji(emoji: string) {
@@ -77,6 +107,7 @@ export function Composer({ conversationId }: { conversationId: string }) {
     const end = field?.selectionEnd ?? value.length
     const next = `${value.slice(0, start)}${emoji}${value.slice(end)}`
     setValue(next)
+    pulseTyping(next)
     requestAnimationFrame(() => {
       field?.focus()
       const caret = start + emoji.length
@@ -102,15 +133,21 @@ export function Composer({ conversationId }: { conversationId: string }) {
         >
           <Recorder
             kind={recording}
-            onCancel={() => {
-              setRecording(null)
-              toast("Recording discarded")
-            }}
-            onSend={(duration) => {
-              sendRecording(conversationId, recording, duration)
-              toast(
-                recording === "voice" ? "Voice message sent" : "Video message sent"
-              )
+            onCancel={() => setRecording(null)}
+            onSend={(payload) => {
+              void sendRecording(conversationId, recording, payload)
+                .then(() =>
+                  toast(
+                    recording === "voice"
+                      ? "Voice message sent"
+                      : "Video message sent"
+                  )
+                )
+                .catch((error) =>
+                  toast.error(
+                    chatActionError(error, "Could not send recording")
+                  )
+                )
               setRecording(null)
             }}
           />
@@ -146,6 +183,7 @@ export function Composer({ conversationId }: { conversationId: string }) {
             value={value}
             onChange={(event) => {
               setValue(event.target.value)
+              pulseTyping(event.target.value)
               if (event.target.value) playSound("typing")
             }}
             onKeyDown={(event) => {
@@ -210,8 +248,8 @@ export function Composer({ conversationId }: { conversationId: string }) {
           </kbd>{" "}
           new line
         </span>
-        <span className={cn(!online && "text-pulse")}>
-          {online ? "Connected" : "Reconnecting…"}
+        <span className={cn(!(online && socketConnected) && "text-pulse")}>
+          {online && socketConnected ? "Connected" : "Reconnecting…"}
         </span>
       </div>
     </footer>

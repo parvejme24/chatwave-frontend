@@ -61,6 +61,7 @@ export function ConversationRow({
         <UserAvatar
           initials={conversation.initials}
           tone={conversation.tone}
+          photo={conversation.photoUrl}
           presence={conversation.presence}
           showPresence={!conversation.group}
         />

@@ -6,5 +6,6 @@ import { Thread } from "./thread"
 
 export function ChatThreadPage() {
   const { id } = useParams<{ id: string }>()
-  return <Thread conversationId={id} />
+  const conversationId = Array.isArray(id) ? id[0] : id
+  return <Thread conversationId={conversationId ?? ""} />
 }

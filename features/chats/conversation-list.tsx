@@ -2,11 +2,11 @@
 
 import { motion, useReducedMotion } from "framer-motion"
 import { PenLine, Search, Users } from "lucide-react"
-import { usePathname } from "next/navigation"
-import { useMemo, useState } from "react"
-import { toast } from "sonner"
+import { usePathname, useRouter } from "next/navigation"
+import { useEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent } from "react"
 
 import { useMediaQuery } from "../../lib/hooks/use-media-query"
+import { useDebouncedValue } from "../../lib/hooks/use-debounced-value"
 
 import { IconBtn } from "../../components/layout/icon-btn"
 import { ConversationRow } from "./conversation-row"
@@ -15,7 +15,10 @@ import { useChat } from "./chat-provider"
 import { MotionItem, signalEase } from "../../components/motion/motion-item"
 import { Input } from "../../components/ui/input"
 import { ScrollArea } from "../../components/ui/scroll-area"
-import type { FilterChip } from "../../lib/types/chat"
+import { selectAccessToken } from "../../lib/store/auth-slice"
+import { useGetConversationsQuery } from "../../lib/store/conversations-api"
+import { useAppSelector } from "../../lib/store/hooks"
+import type { ConversationFilter, FilterChip } from "../../lib/types/chat"
 import { cn } from "../../lib/utils"
 
 const chips: { id: FilterChip; label: string }[] = [
@@ -26,52 +29,157 @@ const chips: { id: FilterChip; label: string }[] = [
   { id: "archived", label: "Archived" },
 ]
 
+function listFilter(chip: FilterChip): ConversationFilter {
+  if (chip === "unread" || chip === "groups" || chip === "archived") return chip
+  return "all"
+}
+
 export function ConversationList() {
   const pathname = usePathname()
+  const router = useRouter()
   const isMobile = useMediaQuery("(max-width: 859px)")
   const reduceMotion = useReducedMotion()
-  const { conversations, clearUnread } = useChat()
+  const { conversations, conversationsLoading, clearUnread } = useChat()
+  const token = useAppSelector(selectAccessToken)
   const [query, setQuery] = useState("")
   const [chip, setChip] = useState<FilterChip>("all")
   const [groupOpen, setGroupOpen] = useState(false)
+  const chipScroller = useRef<HTMLDivElement>(null)
+  const chipDrag = useRef({
+    pointerId: -1,
+    startX: 0,
+    startScroll: 0,
+    dragging: false,
+    suppressClick: false,
+  })
+  const [chipEdge, setChipEdge] = useState({ left: false, right: false })
+  const [chipGrabbing, setChipGrabbing] = useState(false)
+  const chipStopDrag = useRef<(() => void) | null>(null)
+
+  useEffect(() => {
+    return () => chipStopDrag.current?.()
+  }, [])
+  const debounced = useDebouncedValue(query.trim(), 300)
+  const filtered = chip !== "all" || debounced.length > 0
+  const skipFiltered = !token || chip === "calls" || !filtered
+  const { data, isFetching } = useGetConversationsQuery(
+    { filter: listFilter(chip), q: debounced || undefined },
+    { skip: skipFiltered }
+  )
 
   const routeId = pathname.startsWith("/chats/")
     ? pathname.split("/")[2]
     : pathname === "/chats" && !isMobile
-      ? "nadia"
+      ? conversations[0]?.id
       : null
 
   const shown = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    let list = conversations
-
-    if (chip === "unread") list = list.filter((item) => item.unread > 0)
-    if (chip === "groups") list = list.filter((item) => item.group)
-    if (chip === "calls") {
-      list = list.filter(
-        (item) =>
-          item.preview.toLowerCase().includes("call") ||
-          item.previewIcon === "video" ||
-          item.messages.some((message) => message.kind === "call")
-      )
-    }
-    if (chip === "archived") list = []
-
-    if (q) {
-      list = list.filter(
-        (item) =>
-          item.name.toLowerCase().includes(q) ||
-          item.preview.toLowerCase().includes(q)
-      )
-    }
-
-    return list
-  }, [chip, conversations, query])
+    if (chip === "calls") return []
+    if (!filtered) return conversations
+    return data?.conversations ?? []
+  }, [chip, conversations, data, filtered])
 
   const searching = query.trim().length > 0
   const pinned = searching ? [] : shown.filter((item) => item.pinned)
   const rest = searching ? shown : shown.filter((item) => !item.pinned)
   const emptyLabel = searching ? query.trim() : chips.find((item) => item.id === chip)?.label
+
+  useEffect(() => {
+    const scroller = chipScroller.current
+    if (!scroller) return
+
+    function updateEdges() {
+      const el = chipScroller.current
+      if (!el) return
+      setChipEdge({
+        left: el.scrollLeft > 4,
+        right: el.scrollLeft + el.clientWidth < el.scrollWidth - 4,
+      })
+    }
+
+    updateEdges()
+    scroller.addEventListener("scroll", updateEdges, { passive: true })
+    const observer = new ResizeObserver(updateEdges)
+    observer.observe(scroller)
+    return () => {
+      scroller.removeEventListener("scroll", updateEdges)
+      observer.disconnect()
+    }
+  }, [])
+
+  useEffect(() => {
+    const scroller = chipScroller.current
+    const selected = scroller?.querySelector<HTMLElement>(
+      `[data-filter-chip="${chip}"]`
+    )
+    if (!scroller || !selected) return
+    const selectedRect = selected.getBoundingClientRect()
+    const scrollerRect = scroller.getBoundingClientRect()
+    const pad = 18
+    if (selectedRect.left < scrollerRect.left + pad) {
+      scroller.scrollBy({
+        left: selectedRect.left - scrollerRect.left - pad,
+        behavior: reduceMotion ? "auto" : "smooth",
+      })
+    } else if (selectedRect.right > scrollerRect.right - pad) {
+      scroller.scrollBy({
+        left: selectedRect.right - scrollerRect.right + pad,
+        behavior: reduceMotion ? "auto" : "smooth",
+      })
+    }
+  }, [chip, reduceMotion])
+
+  function onChipPointerDown(event: PointerEvent<HTMLDivElement>) {
+    if (event.pointerType !== "mouse" || event.button !== 0) return
+    const el = chipScroller.current
+    if (!el) return
+    chipDrag.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startScroll: el.scrollLeft,
+      dragging: false,
+      suppressClick: false,
+    }
+
+    function onMove(move: globalThis.PointerEvent) {
+      if (move.pointerId !== chipDrag.current.pointerId) return
+      const scroller = chipScroller.current
+      if (!scroller) return
+      const dx = move.clientX - chipDrag.current.startX
+      if (!chipDrag.current.dragging) {
+        if (Math.abs(dx) < 8) return
+        chipDrag.current.dragging = true
+        chipDrag.current.suppressClick = true
+        setChipGrabbing(true)
+      }
+      scroller.scrollLeft = chipDrag.current.startScroll - dx
+      move.preventDefault()
+    }
+
+    function onUp(up: globalThis.PointerEvent) {
+      if (up.pointerId !== chipDrag.current.pointerId) return
+      window.removeEventListener("pointermove", onMove)
+      window.removeEventListener("pointerup", onUp)
+      window.removeEventListener("pointercancel", onUp)
+      chipStopDrag.current = null
+      chipDrag.current.pointerId = -1
+      chipDrag.current.dragging = false
+      setChipGrabbing(false)
+    }
+
+    chipStopDrag.current?.()
+    window.addEventListener("pointermove", onMove)
+    window.addEventListener("pointerup", onUp)
+    window.addEventListener("pointercancel", onUp)
+    chipStopDrag.current = () => onUp(event.nativeEvent)
+  }
+
+  function onChipClickCapture(event: MouseEvent<HTMLDivElement>) {
+    if (!chipDrag.current.suppressClick) return
+    event.preventDefault()
+    event.stopPropagation()
+    chipDrag.current.suppressClick = false
+  }
 
   return (
     <>
@@ -93,7 +201,7 @@ export function ConversationList() {
             </IconBtn>
             <IconBtn
               aria-label="New chat"
-              onClick={() => toast("Start a new chat")}
+              onClick={() => router.push("/contacts")}
             >
               <PenLine className="size-5 stroke-[1.75]" aria-hidden />
             </IconBtn>
@@ -115,48 +223,77 @@ export function ConversationList() {
         </div>
       </header>
 
-      <div
-        className="flex shrink-0 gap-1.5 overflow-x-auto px-[18px] py-3 max-[479px]:px-3.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-        role="group"
-        aria-label="Filter conversations"
-      >
-        {chips.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            aria-pressed={chip === item.id}
-            onClick={() => setChip(item.id)}
-            className={cn(
-              "relative h-[30px] shrink-0 cursor-pointer rounded-full border px-[13px] text-[13px] font-medium transition-colors",
-              chip === item.id
-                ? "border-ink text-paper"
-                : "border-edge text-ink-3 hover:border-edge-2 hover:text-ink"
-            )}
-          >
-            {chip === item.id ? (
-              <motion.span
-                layoutId={reduceMotion ? undefined : "chat-filter-chip"}
-                className="absolute inset-0 rounded-full bg-ink"
-                transition={{ duration: 0.22, ease: signalEase }}
-              />
-            ) : null}
-            <span className="relative z-[1]">{item.label}</span>
-          </button>
-        ))}
+      <div className="relative shrink-0">
+        <div
+          ref={chipScroller}
+          onPointerDown={onChipPointerDown}
+          onClickCapture={onChipClickCapture}
+          className={cn(
+            "overflow-x-auto overscroll-x-contain py-3 select-none [scrollbar-width:none] [-webkit-overflow-scrolling:touch] [&::-webkit-scrollbar]:hidden",
+            chipGrabbing ? "cursor-grabbing" : "cursor-grab"
+          )}
+          role="group"
+          aria-label="Filter conversations"
+        >
+          <div className="flex w-max min-w-full flex-nowrap gap-1.5 px-[18px] max-[479px]:px-3.5">
+            {chips.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                data-filter-chip={item.id}
+                aria-pressed={chip === item.id}
+                onClick={() => setChip(item.id)}
+                className={cn(
+                  "relative h-[30px] shrink-0 cursor-pointer rounded-full border px-[13px] text-[13px] font-medium whitespace-nowrap transition-colors",
+                  chip === item.id
+                    ? "border-ink text-paper"
+                    : "border-edge text-ink-3 hover:border-edge-2 hover:text-ink"
+                )}
+              >
+                {chip === item.id ? (
+                  <motion.span
+                    layoutId={reduceMotion ? undefined : "chat-filter-chip"}
+                    className="absolute inset-0 rounded-full bg-ink"
+                    transition={{ duration: 0.22, ease: signalEase }}
+                  />
+                ) : null}
+                <span className="relative z-[1]">{item.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+        {chipEdge.left ? (
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-y-0 left-0 w-5 bg-linear-to-r from-surface to-transparent"
+          />
+        ) : null}
+        {chipEdge.right ? (
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-linear-to-l from-surface to-transparent"
+          />
+        ) : null}
       </div>
 
       <ScrollArea className="h-full min-h-0 flex-1">
         <div className="px-2.5 pb-4 max-[479px]:px-2" role="list">
-          {!shown.length ? (
+          {conversationsLoading || (filtered && isFetching && !shown.length) ? (
+            <p className="px-3 py-12 text-center text-sm text-ink-3">
+              Loading conversations…
+            </p>
+          ) : !shown.length ? (
             <MotionItem className="flex flex-col items-center px-5 py-12 text-center">
               <div className="mb-2.5 grid size-[68px] place-items-center rounded-[20px] border border-edge bg-surface text-ink-4 shadow-[0_1px_2px_rgba(17,24,33,0.06),0_2px_8px_rgba(17,24,33,0.04)]">
                 <Search className="size-7 stroke-[1.75]" aria-hidden />
               </div>
               <h3 className="font-display text-[19px] font-bold tracking-[-0.02em] text-ink">
-                No matches
+                {chip === "calls" ? "No calls yet" : "No matches"}
               </h3>
               <p className="mt-1 max-w-[320px] text-sm text-ink-3">
-                Nothing here for {emptyLabel}.
+                {chip === "calls"
+                  ? "Call history will show here once Calls are wired."
+                  : `Nothing here for ${emptyLabel}.`}
               </p>
             </MotionItem>
           ) : (

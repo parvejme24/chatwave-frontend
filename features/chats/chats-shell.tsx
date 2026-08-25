@@ -11,11 +11,11 @@ import { useMediaQuery } from "../../lib/hooks/use-media-query"
 export function ChatsShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const isMobile = useMediaQuery("(max-width: 859px)")
-  const { drawerOpen, profile, setDrawerOpen } = useChat()
+  const { conversations, drawerOpen, profile, setDrawerOpen } = useChat()
   const routeId = pathname.startsWith("/chats/")
     ? pathname.split("/")[2]
     : pathname === "/chats" && !isMobile
-      ? "nadia"
+      ? conversations[0]?.id
       : undefined
 
   useEffect(() => {

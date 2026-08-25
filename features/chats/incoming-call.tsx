@@ -1,39 +1,72 @@
 "use client"
 
 import { AnimatePresence } from "framer-motion"
-import { useEffect, useState } from "react"
+import { usePathname, useRouter } from "next/navigation"
+import { useEffect, useMemo } from "react"
 import { toast } from "sonner"
 
 import { IncomingCallDialog } from "../call/incoming-call-dialog"
+import { hrefForLiveCall } from "../../lib/call"
+import { mutationErrorMessage } from "../../lib/store/api-error"
+import { selectAccessToken, selectAuthUser } from "../../lib/store/auth-slice"
+import {
+  useAcceptCallMutation,
+  useDeclineCallMutation,
+  useGetCallsQuery,
+} from "../../lib/store/calls-api"
+import { useAppDispatch, useAppSelector } from "../../lib/store/hooks"
+import {
+  selectIncomingCall,
+  selectSocketConnected,
+  setIncomingCall,
+} from "../../lib/store/realtime-slice"
 import { playSound, startSoundLoop, stopSoundLoop } from "../../lib/sounds"
 
 export function IncomingCall() {
-  const [open, setOpen] = useState(false)
-
-  useEffect(() => {
-    function onKey(event: KeyboardEvent) {
-      const target = event.target as HTMLElement | null
-      const typing =
-        target instanceof HTMLInputElement ||
-        target instanceof HTMLTextAreaElement ||
-        target?.isContentEditable
-
-      if (event.key === "Escape") {
-        setOpen((wasOpen) => {
-          if (wasOpen) playSound("callEnd")
-          return false
-        })
-        return
-      }
-
-      if ((event.key === "i" || event.key === "I") && !typing) {
-        setOpen(true)
-      }
+  const router = useRouter()
+  const pathname = usePathname()
+  const dispatch = useAppDispatch()
+  const token = useAppSelector(selectAccessToken)
+  const me = useAppSelector(selectAuthUser)
+  const socketConnected = useAppSelector(selectSocketConnected)
+  const socketIncoming = useAppSelector(selectIncomingCall)
+  const activeCallId = useMemo(() => {
+    if (pathname !== "/call") return ""
+    if (typeof window === "undefined") return ""
+    return new URLSearchParams(window.location.search).get("callId")?.trim() || ""
+  }, [pathname])
+  const { data } = useGetCallsQuery(
+    { filter: "all", limit: 20 },
+    {
+      skip: !token || socketConnected,
+      pollingInterval: token && !socketConnected ? 4000 : 0,
     }
+  )
+  const polled = useMemo(() => {
+    if (socketConnected) return undefined
+    return data?.calls.find(
+      (call) =>
+        call.status === "ringing" &&
+        call.direction === "in" &&
+        call.id !== activeCallId
+    )
+  }, [activeCallId, data, socketConnected])
+  const [acceptCall, { isLoading: accepting }] = useAcceptCallMutation()
+  const [declineCall, { isLoading: declining }] = useDeclineCallMutation()
 
-    window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
-  }, [])
+  const incoming =
+    socketIncoming &&
+    socketIncoming.status === "ringing" &&
+    socketIncoming.id !== activeCallId &&
+    socketIncoming.initiatedBy !== me?.id
+      ? socketIncoming
+      : null
+
+  const peer = incoming?.peer.name || polled?.name || ""
+  const initials = incoming?.peer.initials || polled?.initials || "?"
+  const kind = incoming?.type || polled?.type || "video"
+  const callId = incoming?.id || polled?.id || ""
+  const open = Boolean(callId)
 
   useEffect(() => {
     if (!open) {
@@ -42,27 +75,50 @@ export function IncomingCall() {
     }
     startSoundLoop("incoming")
     return () => stopSoundLoop("incoming")
-  }, [open])
+  }, [open, callId])
 
-  function close() {
-    setOpen(false)
-    playSound("callEnd")
+  async function decline() {
+    if (!callId) return
+    try {
+      await declineCall(callId).unwrap()
+      dispatch(setIncomingCall(null))
+      playSound("callEnd")
+      toast("Call declined")
+    } catch (error) {
+      toast.error(mutationErrorMessage(error, "Could not decline call"))
+    }
+  }
+
+  async function accept() {
+    if (!callId) return
+    try {
+      const live = await acceptCall(callId).unwrap()
+      dispatch(setIncomingCall(null))
+      stopSoundLoop("incoming")
+      router.push(
+        hrefForLiveCall(live) ||
+          (incoming ? hrefForLiveCall(incoming) : "") ||
+          polled?.href ||
+          polled?.actions?.[0]?.href ||
+          "/"
+      )
+    } catch (error) {
+      toast.error(mutationErrorMessage(error, "Could not accept call"))
+    }
   }
 
   return (
     <AnimatePresence>
       {open ? (
         <IncomingCallDialog
-          key="incoming-call"
-          peer="Tanvir Rahman"
-          initials="TR"
-          href="/call?type=video&peer=Tanvir%20Rahman"
-          onDismiss={close}
-          onDecline={() => {
-            close()
-            toast("Call declined")
-          }}
-          onAccept={() => setOpen(false)}
+          key={callId}
+          peer={peer}
+          initials={initials}
+          kind={kind}
+          busy={accepting || declining}
+          onDismiss={() => void decline()}
+          onDecline={() => void decline()}
+          onAccept={() => void accept()}
         />
       ) : null}
     </AnimatePresence>
