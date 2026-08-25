@@ -1,5 +1,7 @@
-import type { AvatarTone } from "../types/chat"
-import { DEFAULT_SOUND_FAVORITES } from "../sounds"
+import type { AvatarTone, Presence } from "../types/chat"
+import { DEFAULT_USER_SETTINGS, type UserSettings } from "../types/settings"
+
+export type { ThemePreference, UserSettings, VideoQuality } from "../types/settings"
 
 export type SettingsProfile = {
   name: string
@@ -11,6 +13,7 @@ export type SettingsProfile = {
   tone: AvatarTone
   photo: string | null
   isOwner?: boolean
+  presence?: Presence
 }
 
 export const SETTINGS_PROFILE: SettingsProfile = {
@@ -45,19 +48,7 @@ export function initialsFromName(name: string) {
   return `${parts[0][0]}${parts[1][0]}`.toUpperCase()
 }
 
-export type VideoQuality = "auto" | "720p" | "1080p"
-
-export const INITIAL_SETTINGS = {
-  reduceMotion: false,
-  messageNotifications: true,
-  notificationSounds: true,
-  soundFavorites: { ...DEFAULT_SOUND_FAVORITES },
-  missedCallEmails: true,
-  unreadDigest: false,
-  readReceipts: true,
-  showLastSeen: true,
-  videoQuality: "720p" as VideoQuality,
-  noiseSuppression: true,
-  autoDownload: false,
-  androidSession: true,
+export const INITIAL_SETTINGS: UserSettings = {
+  ...DEFAULT_USER_SETTINGS,
+  soundFavorites: { ...DEFAULT_USER_SETTINGS.soundFavorites },
 }

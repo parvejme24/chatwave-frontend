@@ -64,6 +64,7 @@ export const CONVERSATIONS: Conversation[] = [
         status: "seen",
         reply: { who: "Nadia Hasan", text: "Voice message · 0:34" },
         reactions: [{ emoji: "🔥", count: 1, mine: false }],
+        pinned: true,
       },
       {
         id: "nadia-6",
@@ -98,12 +99,12 @@ export const CONVERSATIONS: Conversation[] = [
     unread: 4,
     preview: "Rakib: the waveform seek is smooth now",
     members: [
-      { id: "me", name: ME.name, initials: ME.initials, tone: ME.tone, presence: "online", isMe: true },
-      { id: "rakib", name: "Rakib Islam", initials: "RI", tone: "c", presence: "online", user: "rakib" },
-      { id: "nadia", name: "Nadia Hasan", initials: "NH", tone: "b", presence: "online", user: "nadia" },
-      { id: "sumaiya", name: "Sumaiya Akter", initials: "SA", tone: "d", presence: "online", user: "sumaiya" },
-      { id: "tanvir", name: "Tanvir Rahman", initials: "TR", tone: "f", presence: "away", user: "tanvir" },
-      { id: "farhan", name: "Farhan Kabir", initials: "FK", tone: "a", presence: "offline", user: "farhan" },
+      { id: "me", name: ME.name, initials: ME.initials, tone: ME.tone, presence: "online", isMe: true, role: "admin" },
+      { id: "rakib", name: "Rakib Islam", initials: "RI", tone: "c", presence: "online", user: "rakib", role: "member" },
+      { id: "nadia", name: "Nadia Hasan", initials: "NH", tone: "b", presence: "online", user: "nadia", role: "admin" },
+      { id: "sumaiya", name: "Sumaiya Akter", initials: "SA", tone: "d", presence: "online", user: "sumaiya", role: "member" },
+      { id: "tanvir", name: "Tanvir Rahman", initials: "TR", tone: "f", presence: "away", user: "tanvir", role: "member" },
+      { id: "farhan", name: "Farhan Kabir", initials: "FK", tone: "a", presence: "offline", user: "farhan", role: "member" },
     ],
     messages: [
       { id: "team-d1", kind: "day", label: "Today" },
@@ -117,6 +118,7 @@ export const CONVERSATIONS: Conversation[] = [
         senderInitials: "RI",
         text: "Merged the seek handler. Dragging across the waveform updates playback position properly now.",
         time: "1:31 PM",
+        pinned: true,
       },
       {
         id: "team-2",
@@ -311,10 +313,10 @@ export const CONVERSATIONS: Conversation[] = [
     unread: 0,
     preview: "Nadia: pushed v3 of the composer",
     members: [
-      { id: "me", name: ME.name, initials: ME.initials, tone: ME.tone, presence: "online", isMe: true },
-      { id: "nadia", name: "Nadia Hasan", initials: "NH", tone: "b", presence: "online", user: "nadia" },
-      { id: "sumaiya", name: "Sumaiya Akter", initials: "SA", tone: "d", presence: "online", user: "sumaiya" },
-      { id: "ishrat", name: "Ishrat Jahan", initials: "IJ", tone: "b", presence: "away", user: "ishrat" },
+      { id: "me", name: ME.name, initials: ME.initials, tone: ME.tone, presence: "online", isMe: true, role: "admin" },
+      { id: "nadia", name: "Nadia Hasan", initials: "NH", tone: "b", presence: "online", user: "nadia", role: "member" },
+      { id: "sumaiya", name: "Sumaiya Akter", initials: "SA", tone: "d", presence: "online", user: "sumaiya", role: "member" },
+      { id: "ishrat", name: "Ishrat Jahan", initials: "IJ", tone: "b", presence: "away", user: "ishrat", role: "member" },
     ],
     messages: [
       { id: "design-d1", kind: "day", label: "Monday" },
@@ -328,6 +330,7 @@ export const CONVERSATIONS: Conversation[] = [
         senderInitials: "NH",
         text: "Pushed v3 of the composer. The record button now swaps in place instead of pushing the send button around.",
         time: "5:12 PM",
+        pinned: true,
       },
       {
         id: "design-2",

@@ -1,7 +1,23 @@
-import type { NextConfig } from "next";
+import type { NextConfig } from "next"
+
+const backendOrigin = (
+  process.env.API_URL ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  "https://chatwave-backend-z7n1.onrender.com"
+).replace(/\/$/, "")
 
 const nextConfig: NextConfig = {
-  /* config options here */
-};
+  experimental: {
+    proxyClientMaxBodySize: "25mb",
+  },
+  async rewrites() {
+    return [
+      {
+        source: "/cw-api/:path*",
+        destination: `${backendOrigin}/:path*`,
+      },
+    ]
+  },
+}
 
-export default nextConfig;
+export default nextConfig
