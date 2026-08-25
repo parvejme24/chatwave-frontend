@@ -5,20 +5,82 @@ import { useMemo, useState } from "react"
 import { AllContactsCard } from "./all-contacts-card"
 import { ContactSearch } from "./contact-search"
 import { OnlineCard } from "./online-card"
-import { useSettings } from "../settings/settings-provider"
-import { isManagedUserHidden } from "../../lib/data/admin-users"
-import { CONTACTS, filterContacts } from "../../lib/data/contacts"
+import { SuggestionsCard } from "./suggestions-card"
+import { filterContacts } from "../../lib/data/contacts"
+import { useDebouncedValue } from "../../lib/hooks/use-debounced-value"
+import { selectAccessToken, selectAuthUser } from "../../lib/store/auth-slice"
+import {
+  useGetContactSuggestionsQuery,
+  useGetContactsQuery,
+  useGetOnlineContactsQuery,
+} from "../../lib/store/contacts-api"
+import { useAppSelector } from "../../lib/store/hooks"
+import { useSearchUsersQuery, useGetOnlineUsersQuery } from "../../lib/store/users-api"
+import { contactFromDto } from "../../lib/types/contact"
+import { contactFromPublicUser, sortContacts } from "../../lib/users"
 
 export function ContactsPage() {
-  const { users, removedUserKeys } = useSettings()
+  const me = useAppSelector(selectAuthUser)
+  const token = useAppSelector(selectAccessToken)
   const [query, setQuery] = useState("")
-  const matches = useMemo(() => {
-    const available = CONTACTS.filter(
-      (contact) =>
-        !isManagedUserHidden(users, removedUserKeys, contact.user, contact.name)
-    )
-    return filterContacts(available, query)
-  }, [query, removedUserKeys, users])
+  const debounced = useDebouncedValue(query.trim(), 300)
+  const searching = debounced.length > 0
+  const { data: list } = useGetContactsQuery()
+  const {
+    data: onlineList,
+    isFetching: loadingOnline,
+    isError: onlineFailed,
+  } = useGetOnlineContactsQuery()
+  const { data: suggestionResults, isFetching: loadingSuggestions } =
+    useGetContactSuggestionsQuery(undefined, { skip: searching })
+  const {
+    data: directory,
+    isFetching: loadingDirectory,
+    isError: directoryFailed,
+  } = useSearchUsersQuery({ limit: 100 }, { skip: !token })
+  const { data: onlineUsers } = useGetOnlineUsersQuery(undefined, {
+    skip: !token,
+  })
+  const { data: searchHits, isFetching: searchingPeople } = useSearchUsersQuery(
+    { q: debounced, limit: 40 },
+    { skip: !token || debounced.length < 2 }
+  )
+
+  const savedIds = useMemo(() => {
+    const ids = new Set<string>()
+    for (const contact of list?.contacts ?? []) {
+      if (contact.id) ids.add(contact.id)
+    }
+    return ids
+  }, [list])
+  const online = useMemo(() => {
+    const rows = (onlineList?.contacts ?? []).map(contactFromDto)
+    return sortContacts(filterContacts(rows, query))
+  }, [onlineList, query])
+  const suggestions = useMemo(
+    () => (suggestionResults ?? []).map(contactFromDto),
+    [suggestionResults]
+  )
+  const directoryPeople = useMemo(() => {
+    const byId = new Map<string, ReturnType<typeof contactFromPublicUser>>()
+    for (const person of directory ?? []) {
+      if (person.id === me?.id) continue
+      byId.set(person.id, contactFromPublicUser(person))
+    }
+    for (const person of onlineUsers ?? []) {
+      if (person.id === me?.id) continue
+      byId.set(person.id, contactFromPublicUser(person))
+    }
+    for (const person of searchHits ?? []) {
+      if (person.id === me?.id) continue
+      byId.set(person.id, contactFromPublicUser(person))
+    }
+    for (const contact of list?.contacts ?? []) {
+      if (!contact.id || contact.id === me?.id || byId.has(contact.id)) continue
+      byId.set(contact.id, contactFromDto(contact))
+    }
+    return sortContacts(filterContacts([...byId.values()], query))
+  }, [directory, list, me?.id, onlineUsers, query, searchHits])
 
   return (
     <section className="h-dvh overflow-y-auto bg-paper max-[859px]:pb-[calc(74px+env(safe-area-inset-bottom))]">
@@ -33,8 +95,26 @@ export function ContactsPage() {
         </header>
 
         <ContactSearch value={query} onChange={setQuery} />
-        <OnlineCard contacts={matches} />
-        <AllContactsCard contacts={matches} />
+        <OnlineCard
+          contacts={online}
+          loading={loadingOnline}
+          error={onlineFailed}
+          total={onlineList?.total ?? list?.total}
+          onlineCount={onlineList?.onlineCount ?? list?.onlineCount}
+        />
+        {searching ? null : (
+          <SuggestionsCard
+            contacts={suggestions}
+            loading={loadingSuggestions}
+          />
+        )}
+        <AllContactsCard
+          contacts={directoryPeople}
+          savedIds={savedIds}
+          loading={loadingDirectory || searchingPeople}
+          error={directoryFailed}
+          searching={searching}
+        />
       </div>
     </section>
   )
