@@ -49,7 +49,7 @@ export default function RootLayout({
       suppressHydrationWarning
       className={`${display.variable} ${sans.variable} ${mono.variable} h-full antialiased`}
     >
-      <body className="flex min-h-full flex-col font-sans">
+      <body suppressHydrationWarning className="flex min-h-full flex-col font-sans">
         <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
