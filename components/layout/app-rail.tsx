@@ -15,10 +15,11 @@ import { useTheme } from "next-themes"
 
 import { useSettings } from "../../features/settings/settings-provider"
 import { UserAvatar } from "../shared/user-avatar"
+import { useNavUnread } from "../../lib/hooks/use-nav-unread"
 import { cn } from "../../lib/utils"
 
 const links = [
-  { href: "/chats", label: "Chats", icon: MessageCircle, badge: 7 },
+  { href: "/chats", label: "Chats", icon: MessageCircle },
   { href: "/calls", label: "Calls", icon: Phone },
   { href: "/contacts", label: "Contacts", icon: Users },
 ] as const
@@ -33,6 +34,7 @@ export function AppRail() {
   const pathname = usePathname()
   const { resolvedTheme, setTheme } = useTheme()
   const { profile } = useSettings()
+  const unread = useNavUnread()
 
   return (
     <nav
@@ -64,9 +66,9 @@ export function AppRail() {
             )}
           >
             <Icon className="size-6 stroke-[1.75]" aria-hidden />
-            {"badge" in item ? (
+            {item.href === "/chats" && unread > 0 ? (
               <span className="absolute top-1.5 right-1.5 grid h-[18px] min-w-[18px] place-items-center rounded-full border-2 border-surface bg-pulse px-[5px] font-mono text-[10.5px] font-bold text-white">
-                {item.badge}
+                {unread > 99 ? "99+" : unread}
               </span>
             ) : null}
           </Link>
@@ -108,7 +110,7 @@ export function AppRail() {
           initials={profile.initials}
           tone={profile.tone}
           photo={profile.photo}
-          presence="online"
+          presence={profile.presence ?? "offline"}
           showPresence
           size="sm"
         />

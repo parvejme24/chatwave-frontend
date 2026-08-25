@@ -7,6 +7,9 @@ import {
   LogIn,
   MessageCircle,
   Phone,
+  ShieldAlert,
+  ShieldCheck,
+  Trash2,
   UserPlus,
   Users,
   X,
@@ -15,6 +18,7 @@ import {
 import { IconBtn } from "../../components/layout/icon-btn"
 import { signalEase } from "../../components/motion/motion-item"
 import { UserAvatar } from "../../components/shared/user-avatar"
+import { useGetAdminUserQuery } from "../../lib/store/admin-api"
 import { contactInitials } from "../../lib/types/contact"
 import type { ManagedUser, UserHistoryKind } from "../../lib/types/admin"
 
@@ -25,31 +29,40 @@ const kindIcon: Record<UserHistoryKind, typeof MessageCircle> = {
   media: ImageIcon,
   call: Phone,
   group: Users,
+  ban: ShieldAlert,
+  unban: ShieldCheck,
+  delete: Trash2,
 }
 
 export function UserHistoryDialog({
   user,
+  userId,
   onClose,
 }: {
   user: ManagedUser | null
+  userId?: string | null
   onClose: () => void
 }) {
   const reduceMotion = useReducedMotion()
+  const id = userId || user?.id || ""
+  const { data } = useGetAdminUserQuery(id, { skip: !id })
+  const detail = data?.user ?? user
+  const history = data?.history ?? detail?.history ?? []
 
   useEffect(() => {
-    if (!user) return
+    if (!user && !userId) return
     function onKey(event: KeyboardEvent) {
       if (event.key === "Escape") onClose()
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [user, onClose])
+  }, [user, userId, onClose])
 
   return (
     <AnimatePresence>
-      {user ? (
+      {detail ? (
         <motion.div
-          key={user.id}
+          key={detail.id}
           role="dialog"
           aria-modal="true"
           aria-labelledby="user-history-title"
@@ -71,23 +84,24 @@ export function UserHistoryDialog({
           >
             <header className="flex shrink-0 items-start gap-3 border-b border-edge px-4 py-4">
               <UserAvatar
-                initials={contactInitials(user.name)}
-                tone={user.tone}
-                presence={user.presence}
-                showPresence={user.status === "active"}
+                initials={detail.initials || contactInitials(detail.name)}
+                tone={detail.tone}
+                photo={detail.photoUrl}
+                presence={detail.presence}
+                showPresence={detail.status === "active"}
               />
               <div className="min-w-0 flex-1">
                 <h2
                   id="user-history-title"
                   className="font-display text-[17px] font-bold tracking-[-0.02em] text-ink"
                 >
-                  {user.name}
+                  {detail.name}
                 </h2>
                 <p className="truncate text-[13px] text-ink-3">
-                  @{user.user} · {user.email}
+                  @{detail.user} · {detail.email}
                 </p>
                 <p className="mt-1 font-mono text-[11.5px] text-ink-4">
-                  Joined {user.joined} · Last seen {user.lastSeen}
+                  Joined {detail.joined || "—"} · Last seen {detail.lastSeen || "—"}
                 </p>
               </div>
               <IconBtn aria-label="Close history" onClick={onClose}>
@@ -97,11 +111,16 @@ export function UserHistoryDialog({
 
             <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
               <p className="mb-3 text-[11px] font-bold tracking-[0.1em] text-ink-4 uppercase">
-                Activity · {user.history.length}
+                Activity · {history.length}
               </p>
               <ol className="flex flex-col gap-2.5">
-                {user.history.map((event) => {
-                  const Icon = kindIcon[event.kind]
+                {history.length === 0 ? (
+                  <p className="px-1 py-8 text-center text-sm text-ink-3">
+                    No activity recorded yet.
+                  </p>
+                ) : (
+                  history.map((event) => {
+                    const Icon = kindIcon[event.kind] ?? MessageCircle
                   return (
                     <li
                       key={event.id}
@@ -127,7 +146,8 @@ export function UserHistoryDialog({
                       </div>
                     </li>
                   )
-                })}
+                  })
+                )}
               </ol>
             </div>
           </motion.div>

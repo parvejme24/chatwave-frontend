@@ -5,9 +5,10 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 
 import { cn } from "../../lib/utils"
+import { useNavUnread } from "../../lib/hooks/use-nav-unread"
 
 const tabs = [
-  { href: "/chats", label: "Chats", icon: MessageCircle, badge: 7 },
+  { href: "/chats", label: "Chats", icon: MessageCircle },
   { href: "/calls", label: "Calls", icon: Phone },
   { href: "/contacts", label: "Contacts", icon: Users },
   { href: "/settings", label: "Settings", icon: Settings },
@@ -25,6 +26,7 @@ function isCurrent(pathname: string, href: string) {
 
 export function MobileTabBar({ hidden }: { hidden?: boolean }) {
   const pathname = usePathname()
+  const unread = useNavUnread()
 
   if (hidden) return null
 
@@ -50,9 +52,9 @@ export function MobileTabBar({ hidden }: { hidden?: boolean }) {
             >
               <Icon className="size-5 stroke-[1.75]" aria-hidden />
               {tab.label}
-              {"badge" in tab ? (
+              {tab.href === "/chats" && unread > 0 ? (
                 <span className="absolute top-0 right-[22%] grid h-[18px] min-w-[18px] place-items-center rounded-full border-2 border-surface bg-pulse px-[5px] font-mono text-[10.5px] font-bold text-white">
-                  {tab.badge}
+                  {unread > 99 ? "99+" : unread}
                 </span>
               ) : null}
             </Link>
