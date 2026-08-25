@@ -1,11 +1,12 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useSyncExternalStore } from "react"
 import { useTheme } from "next-themes"
 
 import { SegControl } from "./seg-control"
 import { SettingRow } from "./setting-row"
 import { Switch } from "../../components/ui/switch"
+import type { ThemePreference } from "../../lib/types/settings"
 
 const themeOptions = [
   { value: "light", label: "Light" },
@@ -13,20 +14,21 @@ const themeOptions = [
   { value: "system", label: "System" },
 ] as const
 
+function subscribe() {
+  return () => {}
+}
+
 export function AppearanceCard({
   reduceMotion,
   onReduceMotionChange,
+  onThemeChange,
 }: {
   reduceMotion: boolean
   onReduceMotionChange: (value: boolean) => void
+  onThemeChange?: (value: ThemePreference) => void
 }) {
   const { theme, setTheme } = useTheme()
-  const [mounted, setMounted] = useState(false)
-
-  useEffect(() => {
-    setMounted(true)
-  }, [])
-
+  const mounted = useSyncExternalStore(subscribe, () => true, () => false)
   const current = mounted ? (theme ?? "light") : "light"
 
   return (
@@ -41,7 +43,16 @@ export function AppearanceCard({
           <SegControl
             ariaLabel="Theme"
             value={current}
-            onChange={setTheme}
+            onChange={(value) => {
+              setTheme(value)
+              if (
+                value === "light" ||
+                value === "dark" ||
+                value === "system"
+              ) {
+                onThemeChange?.(value)
+              }
+            }}
             options={[...themeOptions]}
           />
         </SettingRow>
@@ -49,7 +60,7 @@ export function AppearanceCard({
           title="Reduce motion"
           hint="Turns off the waveform and ripple animations"
         >
-            <Switch
+          <Switch
             checked={reduceMotion}
             onCheckedChange={onReduceMotionChange}
             aria-label="Reduce motion"

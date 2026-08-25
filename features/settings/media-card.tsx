@@ -18,6 +18,7 @@ export function MediaCard({
   videoQuality,
   noiseSuppression,
   autoDownload,
+  storageHint,
   onVideoQualityChange,
   onNoiseSuppressionChange,
   onAutoDownloadChange,
@@ -25,6 +26,7 @@ export function MediaCard({
   videoQuality: VideoQuality
   noiseSuppression: boolean
   autoDownload: boolean
+  storageHint?: string | null
   onVideoQualityChange: (value: VideoQuality) => void
   onNoiseSuppressionChange: (value: boolean) => void
   onAutoDownloadChange: (value: boolean) => void
@@ -72,7 +74,7 @@ export function MediaCard({
         </SettingRow>
         <SettingRow
           title="Storage used"
-          hint="1.8 GB of media across 42 conversations"
+          hint={storageHint ?? "Cache on this device only"}
         >
           <Button
             type="button"

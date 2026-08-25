@@ -12,6 +12,27 @@ import {
   type SoundEvent,
   type SoundFavorites,
 } from "../../lib/sounds"
+import {
+  selectAccessToken,
+  selectAuthHydrated,
+} from "../../lib/store/auth-slice"
+import { useAppSelector } from "../../lib/store/hooks"
+import { useGetSoundsCatalogQuery } from "../../lib/store/settings-api"
+import type { SoundCatalogEvent } from "../../lib/types/settings"
+
+const SOUND_EVENT_IDS = new Set<string>(SOUND_EVENTS.map((event) => event.id))
+
+function fallbackEvents(): SoundCatalogEvent[] {
+  return SOUND_EVENTS.map((event) => ({
+    id: event.id,
+    title: event.title,
+    hint: event.hint,
+    options: SOUND_OPTIONS[event.id].map((option) => ({
+      id: option.id,
+      name: option.name,
+    })),
+  }))
+}
 
 export function SoundsCard({
   enabled,
@@ -22,9 +43,19 @@ export function SoundsCard({
   favorites: SoundFavorites
   onChange: (favorites: SoundFavorites) => void
 }) {
-  function pick(event: SoundEvent, variantId: string) {
+  const hydrated = useAppSelector(selectAuthHydrated)
+  const token = useAppSelector(selectAccessToken)
+  const { data } = useGetSoundsCatalogQuery(undefined, {
+    skip: !hydrated || !token,
+  })
+  const events = data?.events?.length ? data.events : fallbackEvents()
+  const off = data?.off || SOUND_OFF
+
+  function pick(eventId: string, variantId: string) {
+    if (!SOUND_EVENT_IDS.has(eventId)) return
+    const event = eventId as SoundEvent
     onChange({ ...favorites, [event]: variantId })
-    if (enabled) previewSound(event, variantId)
+    if (enabled && variantId !== off) previewSound(event, variantId)
   }
 
   return (
@@ -41,7 +72,7 @@ export function SoundsCard({
       <div
         className={cn("px-5 py-1.5", !enabled && "pointer-events-none opacity-50")}
       >
-        {SOUND_EVENTS.map((event) => (
+        {events.map((event) => (
           <SettingRow key={event.id} title={event.title} hint={event.hint}>
             <div
               role="group"
@@ -49,18 +80,21 @@ export function SoundsCard({
               className="flex max-w-[360px] flex-wrap justify-end gap-[3px] rounded-[11px] border border-edge bg-surface-2 p-[3px]"
             >
               <Chip
-                pressed={favorites[event.id] === SOUND_OFF}
-                onClick={() => pick(event.id, SOUND_OFF)}
+                pressed={favorites[event.id as SoundEvent] === off}
+                onClick={() => pick(event.id, off)}
               >
                 Off
               </Chip>
-              {SOUND_OPTIONS[event.id].map((option) => (
+              {(event.options?.length
+                ? event.options
+                : SOUND_OPTIONS[event.id as SoundEvent] ?? []
+              ).map((option) => (
                 <Chip
                   key={option.id}
-                  pressed={favorites[event.id] === option.id}
+                  pressed={favorites[event.id as SoundEvent] === option.id}
                   onClick={() => pick(event.id, option.id)}
                 >
-                  {favorites[event.id] === option.id ? (
+                  {favorites[event.id as SoundEvent] === option.id ? (
                     <Volume2 className="size-3 stroke-[1.75]" aria-hidden />
                   ) : null}
                   {option.name}

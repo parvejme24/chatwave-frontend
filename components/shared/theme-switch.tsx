@@ -19,6 +19,7 @@ const appPaths = [
   "/settings",
   "/advanced",
   "/call",
+  "/delete-account",
 ]
 
 export function ThemeSwitch({ className }: ThemeSwitchProps) {

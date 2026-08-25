@@ -14,9 +14,10 @@ import { SoundsCard } from "./sounds-card"
 import { SignInMethods } from "./sign-in-methods"
 import { isAppOwner } from "../../lib/data/settings"
 import { playSound, setSoundsEnabled } from "../../lib/sounds"
+import { formatStorageUsed } from "../../lib/types/settings"
 
 export function SettingsPage() {
-  const { settings, setSettings, profile } = useSettings()
+  const { settings, setSettings, profile, storage } = useSettings()
   const owner = isAppOwner(profile)
 
   return (
@@ -42,6 +43,9 @@ export function SettingsPage() {
         <MotionItem delay={0.12}>
           <AppearanceCard
             reduceMotion={settings.reduceMotion}
+            onThemeChange={(theme) =>
+              setSettings((current) => ({ ...current, theme }))
+            }
             onReduceMotionChange={(reduceMotion) =>
               setSettings((current) => ({ ...current, reduceMotion }))
             }
@@ -87,6 +91,7 @@ export function SettingsPage() {
             videoQuality={settings.videoQuality}
             noiseSuppression={settings.noiseSuppression}
             autoDownload={settings.autoDownload}
+            storageHint={formatStorageUsed(storage)}
             onVideoQualityChange={(videoQuality) =>
               setSettings((current) => ({ ...current, videoQuality }))
             }
@@ -99,12 +104,7 @@ export function SettingsPage() {
           />
         </MotionItem>
         <MotionItem delay={0.32}>
-          <SessionsCard
-            androidSession={settings.androidSession}
-            onAndroidSignOut={() =>
-              setSettings((current) => ({ ...current, androidSession: false }))
-            }
-          />
+          <SessionsCard />
         </MotionItem>
         {owner ? (
           <MotionItem delay={0.36}>
