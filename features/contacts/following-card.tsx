@@ -1,4 +1,5 @@
 import { ContactRow } from "./contact-row"
+import { ContactListSkeleton } from "../../components/shared/loading-skeletons"
 import type { Contact } from "../../lib/types/contact"
 
 export function FollowingCard({
@@ -28,7 +29,7 @@ export function FollowingCard({
             Could not load saved contacts.
           </div>
         ) : loading && contacts.length === 0 ? (
-          <div className="py-[13px] text-[13px] text-ink-3">Loading…</div>
+          <ContactListSkeleton count={4} />
         ) : contacts.length ? (
           contacts.map((contact) => (
             <ContactRow

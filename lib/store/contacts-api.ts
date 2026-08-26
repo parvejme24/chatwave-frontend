@@ -150,9 +150,40 @@ function unwrapChat(payload: unknown): OpenChatResult {
   return { conversationId, href }
 }
 
+export function contactPreview(contact: {
+  id?: string
+  name: string
+  user: string
+  initials?: string
+  tone?: ContactDto["tone"]
+  photo?: string | null
+  presence?: ContactDto["presence"]
+  note?: string
+  hrefChat?: string
+}): Partial<ContactDto> {
+  return {
+    id: contact.id,
+    name: contact.name,
+    user: contact.user,
+    username: contact.user,
+    initials: contact.initials || contact.name.slice(0, 2).toUpperCase(),
+    tone: contact.tone || "a",
+    photoUrl: contact.photo ?? null,
+    presence: contact.presence || "offline",
+    note: contact.note || "",
+    following: true,
+    hrefChat: contact.hrefChat,
+  }
+}
+
 export type ContactsListArgs = {
   q?: string
   limit?: number
+}
+
+export type FollowUserArg = {
+  userId: string
+  preview?: Partial<ContactDto>
 }
 
 function contactsParams(args?: ContactsListArgs | void) {
@@ -502,13 +533,15 @@ export const contactsApi = createApi({
         error
           ? []
           : [
+              { type: "Contacts", id: "LIST" },
               { type: "Following", id: "LIST" },
               { type: "OnlineContacts", id: "LIST" },
               { type: "ContactSuggestions", id: "LIST" },
             ],
     }),
-    followUser: build.mutation<ContactDto, string>({
-      async queryFn(userId, _api, _extra, baseQuery) {
+    followUser: build.mutation<ContactDto, FollowUserArg>({
+      async queryFn(arg, _api, _extra, baseQuery) {
+        const userId = arg.userId
         if (!followNestedRouteMissing) {
           const nested = await baseQuery({
             url: `/api/contacts/${userId}/follow`,
@@ -526,13 +559,23 @@ export const contactsApi = createApi({
         if (created.error) return { error: created.error }
         return { data: unwrapContact(created.data) }
       },
-      async onQueryStarted(userId, api) {
-        await runFollowLifecycle(userId, true, { id: userId, following: true }, api)
+      async onQueryStarted(arg, api) {
+        await runFollowLifecycle(
+          arg.userId,
+          true,
+          {
+            id: arg.userId,
+            following: true,
+            ...arg.preview,
+          },
+          api
+        )
       },
       invalidatesTags: (_result, error) =>
         error
           ? []
           : [
+              { type: "Contacts", id: "LIST" },
               { type: "Following", id: "LIST" },
               { type: "OnlineContacts", id: "LIST" },
               { type: "ContactSuggestions", id: "LIST" },
@@ -565,6 +608,7 @@ export const contactsApi = createApi({
         error
           ? []
           : [
+              { type: "Contacts", id: "LIST" },
               { type: "Following", id: "LIST" },
               { type: "OnlineContacts", id: "LIST" },
               { type: "ContactSuggestions", id: "LIST" },

@@ -1,6 +1,6 @@
 "use client"
 
-import { ContactRow } from "./contact-row"
+import { PeopleRail } from "./people-rail"
 import type { Contact } from "../../lib/types/contact"
 
 export function AllContactsCard({
@@ -26,32 +26,20 @@ export function AllContactsCard({
         </h3>
         <p className="mt-px text-[13px] text-ink-3">
           {count
-            ? `${count} people on ChatWave`
-            : "Everyone on ChatWave appears here"}
+            ? `${count} ${count === 1 ? "person" : "people"} to follow · swipe to browse`
+            : "People you can still follow appear here"}
         </p>
       </div>
-      <div className="px-5 py-1.5">
-        {error ? (
-          <div className="py-[13px] text-[13px] text-ink-3">
-            Could not load people.
-          </div>
-        ) : loading && contacts.length === 0 ? (
-          <div className="py-[13px] text-[13px] text-ink-3">Loading…</div>
-        ) : contacts.length ? (
-          contacts.map((contact) => (
-            <ContactRow
-              key={contact.id ?? contact.user}
-              contact={contact}
-            />
-          ))
-        ) : (
-          <div className="py-[13px] text-[13px] text-ink-3">
-            {searching
-              ? "No people match that search."
-              : "No other people in ChatWave yet."}
-          </div>
-        )}
-      </div>
+      <PeopleRail
+        contacts={contacts}
+        loading={loading}
+        error={error ? "Could not load people." : undefined}
+        empty={
+          searching
+            ? "No people match that search."
+            : "Everyone you might follow is already in My contacts."
+        }
+      />
     </section>
   )
 }
