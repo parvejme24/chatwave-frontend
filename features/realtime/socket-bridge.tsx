@@ -4,6 +4,7 @@ import { usePathname, useRouter } from "next/navigation"
 import { useEffect, useRef } from "react"
 import { toast } from "sonner"
 
+import { endCallKeepalive, persistLiveCallId, readLiveCallId } from "../../lib/call"
 import {
   connectSocket,
   disconnectSocket,
@@ -439,14 +440,36 @@ export function SocketBridge() {
       const callId =
         nested?.id ||
         (typeof record?.callId === "string" ? record.callId : "") ||
-        (typeof nestedCallId === "string" ? nestedCallId : "")
+        (typeof nestedCallId === "string" ? nestedCallId : "") ||
+        (typeof record?.id === "string" ? record.id : "")
       const incoming = store.getState().realtime.incomingCall
       if (!callId || incoming?.id === callId) {
         dispatch(setIncomingCall(null))
       }
+      if (callId && readLiveCallId() === callId) {
+        persistLiveCallId(null)
+      }
       if (callId) {
         closeCallInCache(dispatch, store.getState, callId, status)
         dispatch(callsApi.util.invalidateTags([{ type: "Call", id: callId }]))
+        const conversationId =
+          nested?.conversationId ||
+          (typeof record?.conversationId === "string"
+            ? record.conversationId
+            : "")
+        if (conversationId) {
+          dispatch(
+            conversationsApi.util.invalidateTags([
+              { type: "Conversation", id: "LIST" },
+              { type: "Conversation", id: conversationId },
+            ])
+          )
+          dispatch(
+            messagesApi.util.invalidateTags([
+              { type: "Messages", id: conversationId },
+            ])
+          )
+        }
       }
       dispatch(callsApi.util.invalidateTags([{ type: "Calls", id: "LIST" }]))
     }
@@ -636,14 +659,21 @@ export function SocketBridge() {
   useEffect(() => {
     if (!pathname.startsWith("/call")) {
       if (joinedCall.current) {
-        emitCallLeave(joinedCall.current)
+        const leavingId = joinedCall.current
+        // Prefer HTTP end (clears Mongo + Redis busy). call:leave is also
+        // treated as hang-up on the new backend, but keepalive covers tab closes.
+        endCallKeepalive(leavingId)
+        emitCallLeave(leavingId)
         joinedCall.current = ""
       }
       return
     }
     const callId = callIdFromLocation()
     if (!callId || callId === joinedCall.current) return
-    if (joinedCall.current) emitCallLeave(joinedCall.current)
+    if (joinedCall.current) {
+      endCallKeepalive(joinedCall.current)
+      emitCallLeave(joinedCall.current)
+    }
     emitCallJoin(callId)
     joinedCall.current = callId
   }, [pathname, token])
