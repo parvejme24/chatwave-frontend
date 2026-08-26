@@ -13,9 +13,13 @@ import { UserAvatar } from "../../components/shared/user-avatar"
 import { Input } from "../../components/ui/input"
 import { useDebouncedValue } from "../../lib/hooks/use-debounced-value"
 import { useMediaQuery } from "../../lib/hooks/use-media-query"
-import { useGetContactsQuery } from "../../lib/store/contacts-api"
+import { useListUsersQuery } from "../../lib/store/users-api"
 import { MIN_GROUP_MEMBERS, type GroupMember } from "../../lib/types/chat"
-import { contactFromDto, contactInitials, type Contact } from "../../lib/types/contact"
+import {
+  contactFromDirectoryUser,
+  contactInitials,
+  type Contact,
+} from "../../lib/types/contact"
 import { cn } from "../../lib/utils"
 
 export function CreateGroupDialog({
@@ -43,8 +47,8 @@ export function CreateGroupDialog({
     }
   }
   const debounced = useDebouncedValue(query.trim(), 300)
-  const { data: list, isFetching } = useGetContactsQuery(
-    { q: debounced },
+  const { data: list, isFetching } = useListUsersQuery(
+    debounced ? { q: debounced, limit: 200 } : { limit: 200 },
     { skip: !open }
   )
 
@@ -60,7 +64,7 @@ export function CreateGroupDialog({
   }, [open, onClose])
 
   const people = useMemo(
-    () => (list?.contacts ?? []).map(contactFromDto),
+    () => (list?.users ?? []).map(contactFromDirectoryUser),
     [list]
   )
   const ready = name.trim().length > 0 && selected.length >= MIN_GROUP_MEMBERS
@@ -220,7 +224,7 @@ export function CreateGroupDialog({
                       </i>
                     </span>
                     <span className="max-w-[52px] truncate text-[10.5px] text-ink-3">
-                      {contact.name.split(" ")[0]}
+                      {(contact.name || "").split(" ")[0] || contact.name}
                     </span>
                   </button>
                 ))}

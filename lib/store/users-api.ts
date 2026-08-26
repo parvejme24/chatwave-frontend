@@ -3,10 +3,12 @@ import { createApi } from "@reduxjs/toolkit/query/react"
 import type { AuthUser } from "../types/auth"
 import type { Presence } from "../types/chat"
 import type {
+  DirectoryUser,
   PresenceUpdate,
   PublicUser,
   SearchUsersArgs,
   UpdateProfileInput,
+  UsersDirectoryList,
 } from "../types/user"
 import { clearAuth, setUser } from "./auth-slice"
 import { axiosBaseQuery } from "./base-query"
@@ -32,9 +34,91 @@ function unwrapPublic(payload: unknown): PublicUser {
 
 function unwrapUserList(payload: unknown): PublicUser[] {
   const record = asRecord(payload)
-  if (Array.isArray(record?.users)) return record.users as PublicUser[]
-  if (Array.isArray(payload)) return payload as PublicUser[]
-  return []
+  const nested = asRecord(record?.data)
+  const raw = Array.isArray(record?.users)
+    ? record.users
+    : Array.isArray(record?.people)
+      ? record.people
+      : Array.isArray(record?.results)
+        ? record.results
+        : Array.isArray(record?.items)
+          ? record.items
+          : Array.isArray(record?.data)
+            ? record.data
+            : Array.isArray(nested?.users)
+              ? nested.users
+              : Array.isArray(payload)
+                ? payload
+                : []
+  return (raw as unknown[])
+    .map((item) => normalizePublicUser(item))
+    .filter((item): item is PublicUser => Boolean(item))
+}
+
+function unwrapDirectory(payload: unknown): UsersDirectoryList {
+  const record = asRecord(payload)
+  const raw = Array.isArray(record?.users)
+    ? record.users
+    : Array.isArray(record?.contacts)
+      ? record.contacts
+      : Array.isArray(payload)
+        ? payload
+        : []
+  const users: DirectoryUser[] = []
+  for (const item of raw) {
+    const base = normalizePublicUser(item)
+    if (!base) continue
+    const entry = asRecord(item)
+    users.push({
+      ...base,
+      following: Boolean(entry?.following),
+      note:
+        (typeof entry?.note === "string" && entry.note) ||
+        (typeof entry?.sub === "string" && entry.sub) ||
+        base.sub ||
+        "",
+      hrefChat:
+        typeof entry?.hrefChat === "string" ? entry.hrefChat : undefined,
+      hrefAudio:
+        typeof entry?.hrefAudio === "string" ? entry.hrefAudio : undefined,
+      hrefVideo:
+        typeof entry?.hrefVideo === "string" ? entry.hrefVideo : undefined,
+      user:
+        (typeof entry?.user === "string" && entry.user) ||
+        base.username ||
+        base.id,
+    })
+  }
+
+  return {
+    users,
+    total: typeof record?.total === "number" ? record.total : users.length,
+    onlineCount:
+      typeof record?.onlineCount === "number"
+        ? record.onlineCount
+        : users.filter((item) => item.presence === "online").length,
+  }
+}
+
+function normalizePublicUser(item: unknown): PublicUser | null {
+  const record = asRecord(item)
+  if (!record) return null
+  const id =
+    (typeof record.id === "string" && record.id) ||
+    (typeof record._id === "string" && record._id) ||
+    ""
+  const username =
+    (typeof record.username === "string" && record.username) ||
+    (typeof record.user === "string" && record.user) ||
+    ""
+  const name = typeof record.name === "string" ? record.name : username
+  if (!id && !username && !name) return null
+  return {
+    ...(record as unknown as PublicUser),
+    id: id || username,
+    name: name || "Someone",
+    username: username || id,
+  }
 }
 
 export const usersApi = createApi({
@@ -132,13 +216,25 @@ export const usersApi = createApi({
       query: (args) => ({
         url: "/api/users/search",
         params: {
-          limit: args?.limit ?? 50,
+          limit: args?.limit ?? 200,
           ...(args?.q ? { q: args.q } : {}),
           ...(args?.presence ? { presence: args.presence } : {}),
         },
       }),
       transformResponse: (response: unknown) => unwrapUserList(response),
       providesTags: [{ type: "UserList", id: "SEARCH" }],
+    }),
+    listUsers: build.query<UsersDirectoryList, SearchUsersArgs | void>({
+      query: (args) => ({
+        url: "/api/users",
+        params: {
+          limit: args?.limit ?? 200,
+          ...(args?.q ? { q: args.q } : {}),
+          ...(args?.presence ? { presence: args.presence } : {}),
+        },
+      }),
+      transformResponse: (response: unknown) => unwrapDirectory(response),
+      providesTags: [{ type: "UserList", id: "DIRECTORY" }],
     }),
     getOnlineUsers: build.query<PublicUser[], void>({
       query: () => ({ url: "/api/users/online" }),
@@ -168,6 +264,7 @@ export const {
   useDeleteMyPhotoMutation,
   useUpdateMyPresenceMutation,
   useSearchUsersQuery,
+  useListUsersQuery,
   useGetOnlineUsersQuery,
   useGetUserByIdQuery,
   useGetUserByUsernameQuery,

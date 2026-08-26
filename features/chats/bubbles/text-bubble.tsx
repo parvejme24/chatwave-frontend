@@ -1,20 +1,18 @@
-import { MessageMeta } from "./message-meta"
 import type { ChatMessage } from "../../../lib/types/chat"
 import { cn } from "../../../lib/utils"
+import { MessageText } from "./message-text"
 
 export function TextBubble({
   message,
   outgoing,
-  seenTotal = 0,
 }: {
   message: ChatMessage
   outgoing: boolean
-  seenTotal?: number
 }) {
   return (
     <div
       className={cn(
-        "rounded-[20px] border px-3.5 pt-[9px] pb-2 text-[14.5px] leading-[1.48] break-words shadow-[0_1px_2px_rgba(17,24,33,0.06),0_2px_8px_rgba(17,24,33,0.04)]",
+        "rounded-[20px] border px-3.5 py-2.5 text-[14.5px] leading-[1.48] break-words shadow-[0_1px_2px_rgba(17,24,33,0.06),0_2px_8px_rgba(17,24,33,0.04)]",
         outgoing
           ? "rounded-br-[7px] border-signal bg-signal text-white"
           : "rounded-bl-[7px] border-edge bg-surface text-ink"
@@ -33,8 +31,9 @@ export function TextBubble({
           {message.reply.text}
         </span>
       ) : null}
-      {message.text}
-      <MessageMeta time={message.time} status={message.status} outgoing={outgoing} seenCount={message.seenCount} seenTotal={seenTotal} />
+      {message.text ? (
+        <MessageText text={message.text} outgoing={outgoing} />
+      ) : null}
     </div>
   )
 }

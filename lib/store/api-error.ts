@@ -22,7 +22,8 @@ export function mutationErrorMessage(error: unknown, fallback: string) {
 }
 
 export function isBadRequest(error: unknown) {
-  return isApiQueryError(error) && error.status === 400
+  if (!error || typeof error !== "object") return false
+  return (error as { status?: unknown }).status === 400
 }
 
 export function isAlreadyInCallError(error: unknown) {

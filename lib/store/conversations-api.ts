@@ -221,6 +221,17 @@ export const conversationsApi = createApi({
         { type: "ConversationMembers", id },
       ],
     }),
+    deleteConversation: build.mutation<{ ok?: boolean }, string>({
+      query: (conversationId) => ({
+        url: `/api/conversations/${conversationId}`,
+        method: "DELETE",
+      }),
+      invalidatesTags: (_result, _error, id) => [
+        { type: "Conversation", id: "LIST" },
+        { type: "Conversation", id },
+        { type: "ConversationMembers", id },
+      ],
+    }),
   }),
 })
 
@@ -237,4 +248,9 @@ export const {
   useRemoveConversationMemberMutation,
   useSetConversationMemberAdminMutation,
   useLeaveConversationMutation,
+  useDeleteConversationMutation,
 } = conversationsApi
+
+export const useListConversationsQuery = useGetConversationsQuery
+export const listConversations =
+  conversationsApi.endpoints.getConversations.initiate

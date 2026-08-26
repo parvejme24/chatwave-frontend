@@ -16,6 +16,7 @@ import { useTheme } from "next-themes"
 import { useSettings } from "../../features/settings/settings-provider"
 import { UserAvatar } from "../shared/user-avatar"
 import { useNavUnread } from "../../lib/hooks/use-nav-unread"
+import { contactInitials } from "../../lib/types/contact"
 import { cn } from "../../lib/utils"
 
 const links = [
@@ -107,8 +108,8 @@ export function AppRail() {
 
       <Link href="/settings" aria-label="Your profile" className="mt-1.5">
         <UserAvatar
-          initials={profile.initials}
-          tone={profile.tone}
+          initials={profile.initials || contactInitials(profile.name)}
+          tone={profile.tone || "a"}
           photo={profile.photo}
           presence={profile.presence ?? "offline"}
           showPresence

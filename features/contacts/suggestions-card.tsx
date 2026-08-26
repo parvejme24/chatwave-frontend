@@ -17,7 +17,7 @@ export function SuggestionsCard({
           Suggestions
         </h3>
         <p className="mt-px text-[13px] text-ink-3">
-          People you can add to contacts
+          People you might want to follow
         </p>
       </div>
       <div className="px-5 py-1.5">
@@ -28,7 +28,6 @@ export function SuggestionsCard({
             <ContactRow
               key={contact.id ?? contact.user}
               contact={contact}
-              mode="add"
             />
           ))
         )}

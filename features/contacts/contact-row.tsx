@@ -1,6 +1,6 @@
 "use client"
 
-import { MessageCircle, MoreHorizontal, PenLine, Phone, Plus, UserMinus, Video } from "lucide-react"
+import { MessageCircle, MoreHorizontal, PenLine, Phone, Video } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
 import { toast } from "sonner"
@@ -25,8 +25,9 @@ import { conversationIdFromHref } from "../../lib/call"
 import { mutationErrorMessage } from "../../lib/store/api-error"
 import {
   useAddContactMutation,
-  useDeleteContactMutation,
+  useFollowUserMutation,
   useOpenContactChatMutation,
+  useUnfollowUserMutation,
   useUpdateContactNoteMutation,
 } from "../../lib/store/contacts-api"
 import { contactInitials, type Contact } from "../../lib/types/contact"
@@ -36,23 +37,26 @@ function actionClassName(extra?: string) {
   return `inline-flex size-10 cursor-pointer items-center justify-center rounded-[11px] text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink ${extra ?? ""}`
 }
 
-export function ContactRow({
-  contact,
-  mode = "saved",
-}: {
-  contact: Contact
-  mode?: "saved" | "add"
-}) {
+export function ContactRow({ contact }: { contact: Contact }) {
   const router = useRouter()
   const [noteOpen, setNoteOpen] = useState(false)
   const [note, setNote] = useState(contact.note)
   const [addContact, { isLoading: adding }] = useAddContactMutation()
+  const [followUser, { isLoading: followingBusy }] = useFollowUserMutation()
   const [updateNote, { isLoading: savingNote }] = useUpdateContactNoteMutation()
-  const [deleteContact, { isLoading: removing }] = useDeleteContactMutation()
+  const [unfollowUser, { isLoading: removing }] = useUnfollowUserMutation()
   const [openChat, { isLoading: openingChat }] = useOpenContactChatMutation()
   const { startCall, isStarting } = useStartCall()
-  const busy = adding || savingNote || removing || openingChat || isStarting
+  const busy =
+    adding || followingBusy || savingNote || removing || openingChat || isStarting
   const personId = contact.id
+  const following = Boolean(contact.following)
+  const username = contact.user ? `@${contact.user}` : ""
+  const subtitle = contact.note
+    ? username
+      ? `${username} · ${contact.note}`
+      : contact.note
+    : username
 
   async function startVoiceOrVideo(type: "audio" | "video") {
     const conversationId = conversationIdFromHref(contact.hrefChat)
@@ -85,15 +89,23 @@ export function ContactRow({
     }
   }
 
-  async function add() {
+  async function follow() {
     if (!personId && !contact.user) return
     try {
-      await addContact(
-        personId ? { userId: personId } : { username: contact.user }
-      ).unwrap()
-      toast(`Added ${contact.name}`)
+      const result = personId
+        ? await followUser(personId).unwrap()
+        : await addContact({ username: contact.user }).unwrap()
+      if (result.hrefChat) {
+        router.push(result.hrefChat)
+        return
+      }
+      const chatId = personId || result.id
+      if (chatId) {
+        const chat = await openChat(chatId).unwrap()
+        router.push(chat.href || `/chats/${chat.conversationId}`)
+      }
     } catch (error) {
-      toast.error(mutationErrorMessage(error, "Could not add contact"))
+      toast.error(mutationErrorMessage(error, "Could not follow"))
     }
   }
 
@@ -108,13 +120,12 @@ export function ContactRow({
     }
   }
 
-  async function remove() {
+  async function unfollow() {
     if (!personId) return
     try {
-      await deleteContact(personId).unwrap()
-      toast(`Removed ${contact.name}`)
+      await unfollowUser(personId).unwrap()
     } catch (error) {
-      toast.error(mutationErrorMessage(error, "Could not remove contact"))
+      toast.error(mutationErrorMessage(error, "Could not unfollow"))
     }
   }
 
@@ -132,77 +143,82 @@ export function ContactRow({
           {contact.name}
         </span>
         <span className="mt-px block truncate text-[13px] text-ink-3">
-          @{contact.user}
-          {contact.note ? ` · ${contact.note}` : ""}
+          {subtitle}
         </span>
       </span>
-      {mode === "add" ? (
-        <button
-          type="button"
-          disabled={busy}
-          aria-label={`Add ${contact.name}`}
-          onClick={() => void add()}
-          className={actionClassName("text-signal hover:text-signal")}
-        >
-          <Plus className="size-5 stroke-[1.75]" aria-hidden />
-        </button>
-      ) : (
-        <span className="flex shrink-0 items-center gap-0.5">
-          <button
-            type="button"
-            disabled={busy}
-            aria-label={`Message ${contact.name}`}
-            onClick={() => void message()}
-            className={actionClassName()}
-          >
-            <MessageCircle className="size-5 stroke-[1.75]" aria-hidden />
-          </button>
-          <button
-            type="button"
-            disabled={busy}
-            aria-label={`Call ${contact.name}`}
-            onClick={() => void startVoiceOrVideo("audio")}
-            className={actionClassName()}
-          >
-            <Phone className="size-5 stroke-[1.75]" aria-hidden />
-          </button>
-          <button
-            type="button"
-            disabled={busy}
-            aria-label={`Video call ${contact.name}`}
-            onClick={() => void startVoiceOrVideo("video")}
-            className={actionClassName()}
-          >
-            <Video className="size-5 stroke-[1.75]" aria-hidden />
-          </button>
-          {personId ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                disabled={busy}
-                aria-label={`More actions for ${contact.name}`}
-                className={actionClassName()}
-              >
-                <MoreHorizontal className="size-5 stroke-[1.75]" aria-hidden />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  onClick={() => {
-                    setNote(contact.note)
-                    setNoteOpen(true)
-                  }}
+      <span className="flex shrink-0 items-center gap-0.5">
+        {following ? (
+          <>
+            <button
+              type="button"
+              disabled={busy}
+              aria-label={`Message ${contact.name}`}
+              onClick={() => void message()}
+              className={actionClassName()}
+            >
+              <MessageCircle className="size-5 stroke-[1.75]" aria-hidden />
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              aria-label={`Call ${contact.name}`}
+              onClick={() => void startVoiceOrVideo("audio")}
+              className={actionClassName()}
+            >
+              <Phone className="size-5 stroke-[1.75]" aria-hidden />
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              aria-label={`Video call ${contact.name}`}
+              onClick={() => void startVoiceOrVideo("video")}
+              className={actionClassName()}
+            >
+              <Video className="size-5 stroke-[1.75]" aria-hidden />
+            </button>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={busy}
+              onClick={() => void unfollow()}
+              className="h-9 rounded-[14px] border border-edge bg-surface-2 px-3 text-[13px] font-medium text-ink hover:bg-surface-3"
+            >
+              Unfollow
+            </Button>
+            {personId ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  disabled={busy}
+                  aria-label={`More actions for ${contact.name}`}
+                  className={actionClassName()}
                 >
-                  <PenLine className="size-4 stroke-[1.75]" aria-hidden />
-                  Edit note
-                </DropdownMenuItem>
-                <DropdownMenuItem variant="destructive" onClick={() => void remove()}>
-                  <UserMinus className="size-4 stroke-[1.75]" aria-hidden />
-                  Remove
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : null}
-        </span>
-      )}
+                  <MoreHorizontal className="size-5 stroke-[1.75]" aria-hidden />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    onClick={() => {
+                      setNote(contact.note)
+                      setNoteOpen(true)
+                    }}
+                  >
+                    <PenLine className="size-4 stroke-[1.75]" aria-hidden />
+                    Edit note
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : null}
+          </>
+        ) : (
+          <Button
+            type="button"
+            disabled={busy || (!personId && !contact.user)}
+            onClick={() => void follow()}
+            className="h-9 rounded-[14px] bg-signal px-3.5 text-[13.5px] font-medium text-white hover:bg-signal-deep"
+          >
+            Follow
+          </Button>
+        )}
+      </span>
 
       <Dialog open={noteOpen} onOpenChange={setNoteOpen}>
         <DialogContent className="rounded-[20px] bg-surface p-5 sm:max-w-[400px]">

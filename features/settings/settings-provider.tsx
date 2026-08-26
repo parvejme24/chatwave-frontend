@@ -16,6 +16,7 @@ import { INITIAL_SETTINGS, SETTINGS_PROFILE } from "../../lib/data/settings"
 import type { SettingsProfile } from "../../lib/data/settings"
 import { setSoundFavorites, setSoundsEnabled } from "../../lib/sounds"
 import { mutationErrorMessage } from "../../lib/store/api-error"
+import { contactInitials } from "../../lib/types/contact"
 import {
   selectAccessToken,
   selectAuthHydrated,
@@ -65,14 +66,15 @@ const SCALAR_KEYS = [
 ] as const
 
 function profileFromAuthUser(user: AuthUser): SettingsProfile {
+  const name = user.name || user.username || "You"
   return {
-    name: user.name,
-    role: user.role,
-    location: user.location,
-    username: user.username,
-    email: user.email,
-    initials: user.initials,
-    tone: user.tone,
+    name,
+    role: user.role || "",
+    location: user.location || "",
+    username: user.username || "",
+    email: user.email || "",
+    initials: user.initials || contactInitials(name),
+    tone: user.tone || "a",
     photo: user.photoUrl,
     isOwner: user.isOwner,
     presence: user.presence,

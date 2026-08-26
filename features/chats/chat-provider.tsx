@@ -14,13 +14,15 @@ import {
   useCreateGroupConversationMutation,
   useGetConversationsQuery,
   useLeaveConversationMutation,
+  useDeleteConversationMutation,
   useMarkConversationReadMutation,
   useRemoveConversationMemberMutation,
   useSetConversationMemberAdminMutation,
   useUpdateMembershipMutation,
 } from "../../lib/store/conversations-api"
 import { selectAccessToken, selectAuthUser } from "../../lib/store/auth-slice"
-import { useAppSelector } from "../../lib/store/hooks"
+import { contactsApi } from "../../lib/store/contacts-api"
+import { useAppDispatch, useAppSelector } from "../../lib/store/hooks"
 import {
   useDeleteMessageMutation,
   useSendMessageMutation,
@@ -35,6 +37,7 @@ import type {
   RecordKind,
 } from "../../lib/types/chat"
 import { MIN_GROUP_MEMBERS } from "../../lib/types/chat"
+import { apiTypeForFiles } from "../../lib/files"
 
 type ChatContextValue = {
   me: Me
@@ -54,7 +57,16 @@ type ChatContextValue = {
     kind: RecordKind,
     payload: { file: File; duration: number }
   ) => Promise<void>
-  deleteMessage: (conversationId: string, messageId: string) => Promise<void>
+  sendAttachment: (
+    conversationId: string,
+    file: File | File[],
+    caption?: string
+  ) => Promise<void>
+  deleteMessage: (
+    conversationId: string,
+    messageId: string,
+    scope?: "me" | "everyone"
+  ) => Promise<void>
   toggleReaction: (
     conversationId: string,
     messageId: string,
@@ -72,6 +84,7 @@ type ChatContextValue = {
     isAdmin: boolean
   ) => Promise<boolean>
   leaveGroup: (conversationId: string) => Promise<boolean>
+  deleteConversation: (conversationId: string) => Promise<boolean>
   searchFocusNonce: number
   requestConversationSearch: () => void
 }
@@ -81,6 +94,7 @@ const ChatContext = createContext<ChatContextValue | null>(null)
 const FALLBACK_ME: Me = { name: "You", initials: "Y", tone: "a" }
 
 export function ChatProvider({ children }: { children: React.ReactNode }) {
+  const dispatch = useAppDispatch()
   const user = useAppSelector(selectAuthUser)
   const token = useAppSelector(selectAccessToken)
   const { data, isFetching } = useGetConversationsQuery(
@@ -97,6 +111,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [removeMemberMut] = useRemoveConversationMemberMutation()
   const [setAdminMut] = useSetConversationMemberAdminMutation()
   const [leaveMut] = useLeaveConversationMutation()
+  const [deleteConversationMut] = useDeleteConversationMutation()
 
   const conversations = useMemo(
     () => data?.conversations ?? [],
@@ -148,6 +163,9 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const sendText = useCallback(
     async (conversationId: string, text: string) => {
       playSound("send")
+      // Send plain text only. URLs stay in `text` so the bubble can linkify /
+      // preview them. Do not post `links` here — Nest @IsUrl often 400s on
+      // real-world URLs (YouTube query strings, etc.).
       await sendMessage({
         conversationId,
         type: "text",
@@ -166,8 +184,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       playSound("send")
       const types =
         kind === "voice"
-          ? (["voice", "audio"] as const)
-          : (["video_note", "video"] as const)
+          ? (["voice", "file"] as const)
+          : (["video_note", "video", "file"] as const)
       let lastError: unknown
       for (const type of types) {
         try {
@@ -190,12 +208,36 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     [sendMessage]
   )
 
+  const sendAttachment = useCallback(
+    async (conversationId: string, file: File | File[], caption?: string) => {
+      playSound("send")
+      const files = (Array.isArray(file) ? file : [file]).slice(0, 10)
+      if (!files.length) return
+      const type = apiTypeForFiles(files)
+      const text = caption?.trim() || undefined
+      // Links in caption are rendered client-side; only send file fields here
+      // so a bad URL cannot 400 the whole attachment.
+      await sendMessage({
+        conversationId,
+        type,
+        files,
+        file: files[0],
+        caption: text,
+      }).unwrap()
+    },
+    [sendMessage]
+  )
+
   const deleteMessage = useCallback(
-    async (conversationId: string, messageId: string) => {
+    async (
+      conversationId: string,
+      messageId: string,
+      scope: "me" | "everyone" = "me"
+    ) => {
       await deleteMessageMut({
         conversationId,
         messageId,
-        scope: "me",
+        scope,
       }).unwrap()
       setPlayingVoiceId((current) => (current === messageId ? null : current))
       playSound("delete")
@@ -281,6 +323,27 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     [leaveMut, setDrawerOpen]
   )
 
+  const deleteConversation = useCallback(
+    async (conversationId: string) => {
+      try {
+        await deleteConversationMut(conversationId).unwrap()
+        dispatch(
+          contactsApi.util.invalidateTags([
+            { type: "Contacts", id: "LIST" },
+            { type: "Following", id: "LIST" },
+            { type: "OnlineContacts", id: "LIST" },
+          ])
+        )
+        setDrawerOpen(false)
+        playSound("delete")
+        return true
+      } catch {
+        return false
+      }
+    },
+    [deleteConversationMut, dispatch, setDrawerOpen]
+  )
+
   const createGroup = useCallback(
     async (name: string, members: GroupMember[]) => {
       const title = name.trim()
@@ -313,6 +376,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       clearUnread,
       sendText,
       sendRecording,
+      sendAttachment,
       deleteMessage,
       toggleReaction,
       togglePinMessage,
@@ -323,6 +387,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       removeGroupMember,
       setGroupAdmin,
       leaveGroup,
+      deleteConversation,
       searchFocusNonce,
       requestConversationSearch,
     }),
@@ -338,6 +403,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       clearUnread,
       sendText,
       sendRecording,
+      sendAttachment,
       deleteMessage,
       setDrawerOpen,
       openProfile,
@@ -350,6 +416,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       removeGroupMember,
       setGroupAdmin,
       leaveGroup,
+      deleteConversation,
       requestConversationSearch,
     ]
   )

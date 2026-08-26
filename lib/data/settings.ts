@@ -1,3 +1,4 @@
+import { contactInitials } from "../types/contact"
 import type { AvatarTone, Presence } from "../types/chat"
 import { DEFAULT_USER_SETTINGS, type UserSettings } from "../types/settings"
 
@@ -41,11 +42,8 @@ export function profileHandle(profile: SettingsProfile) {
   return [`@${user}`, profile.email].filter(Boolean).join(" · ")
 }
 
-export function initialsFromName(name: string) {
-  const parts = name.trim().split(/\s+/).filter(Boolean)
-  if (parts.length === 0) return "?"
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
-  return `${parts[0][0]}${parts[1][0]}`.toUpperCase()
+export function initialsFromName(name?: string | null) {
+  return contactInitials(name)
 }
 
 export const INITIAL_SETTINGS: UserSettings = {

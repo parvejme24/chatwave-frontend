@@ -1,5 +1,6 @@
 import { createApi } from "@reduxjs/toolkit/query/react"
 
+import { formatFileSize } from "../files"
 import type { ChatMessage, MessageDto, MessagesPage, ThreadView } from "../types/chat"
 import {
   asMessageType,
@@ -158,11 +159,26 @@ export type GetMessagesArgs = {
 
 export type SendMessageArg = {
   conversationId: string
-  type?: ChatMessage["type"] | "video" | "audio"
+  type?: ChatMessage["type"] | "audio"
   text?: string
+  caption?: string
   replyTo?: string
   file?: File
+  files?: File[]
+  links?: string[]
   duration?: number
+}
+
+function collectFiles(arg: Pick<SendMessageArg, "file" | "files">) {
+  const list = [...(arg.files ?? [])]
+  if (arg.file && !list.includes(arg.file)) list.unshift(arg.file)
+  return list.slice(0, 10)
+}
+
+function apiMediaType(type?: SendMessageArg["type"]) {
+  if (!type || type === "text") return undefined
+  if (type === "audio") return "voice"
+  return type
 }
 
 export const messagesApi = createApi({
@@ -211,16 +227,31 @@ export const messagesApi = createApi({
       },
     }),
     sendMessage: build.mutation<ChatMessage, SendMessageArg>({
-      query: ({ conversationId, file, ...body }) => {
-        if (file) {
+      query: (arg) => {
+        const { conversationId, ...body } = arg
+        const uploads = collectFiles(arg)
+        const links = (body.links ?? []).filter(Boolean).slice(0, 10)
+        // Multipart only when uploading real files. Link-only / text must stay JSON
+        // or Nest validation returns 400.
+        if (uploads.length) {
           const data = new FormData()
-          data.append("file", file)
-          if (body.type) data.append("type", body.type)
-          if (body.text) data.append("text", body.text)
+          if (uploads.length === 1) {
+            data.append("file", uploads[0], uploads[0].name || "upload")
+          } else {
+            for (const file of uploads) {
+              data.append("files", file, file.name || "upload")
+            }
+          }
+          const type = apiMediaType(body.type) ?? "file"
+          if (type) data.append("type", type)
+          const caption = (body.caption ?? body.text ?? "").trim()
+          if (caption) data.append("caption", caption)
           if (body.replyTo) data.append("replyTo", body.replyTo)
           if (typeof body.duration === "number") {
             data.append("duration", String(Math.round(body.duration)))
           }
+          if (links.length === 1) data.append("links", links[0])
+          else if (links.length > 1) data.append("links", JSON.stringify(links))
           return {
             url: `/api/conversations/${conversationId}/messages`,
             method: "POST",
@@ -233,10 +264,12 @@ export const messagesApi = createApi({
           data: {
             type: body.type ?? "text",
             ...(body.text ? { text: body.text } : {}),
+            ...(body.caption ? { caption: body.caption } : {}),
             ...(body.replyTo ? { replyTo: body.replyTo } : {}),
             ...(typeof body.duration === "number"
               ? { duration: Math.round(body.duration) }
               : {}),
+            ...(links.length ? { links } : {}),
           },
         }
       },
@@ -247,13 +280,36 @@ export const messagesApi = createApi({
           conversationId: message.conversationId || arg.conversationId,
           type: asMessageType(message.type || arg.type),
           mediaUrl: message.mediaUrl,
+          attachments: message.attachments,
           duration: message.duration || arg.duration,
+          caption: message.caption || arg.caption,
         }
       },
       async onQueryStarted(arg, { dispatch, queryFulfilled }) {
+        const uploads = collectFiles(arg)
+        const links = (arg.links ?? []).filter(Boolean)
+        const blobUrls = uploads.map((file) => URL.createObjectURL(file))
         const tempId = `local-${Date.now()}`
-        const blobUrl = arg.file ? URL.createObjectURL(arg.file) : undefined
         const sentAt = new Date().toISOString()
+        const hasMedia = uploads.length > 0 || links.length > 0
+        const optimisticAttachments = [
+          ...uploads.map((file, index) => ({
+            url: blobUrls[index] || "",
+            fileName: file.name,
+            fileSize: formatFileSize(file.size),
+            mimeType: file.type,
+            kind: (file.type.startsWith("image/")
+              ? "image"
+              : file.type.startsWith("video/")
+                ? "video"
+                : "file") as "image" | "video" | "file",
+          })),
+          ...links.map((url) => ({
+            url,
+            fileName: url,
+            kind: "link" as const,
+          })),
+        ]
         const optimistic: ChatMessage = {
           id: tempId,
           kind: "message",
@@ -264,10 +320,20 @@ export const messagesApi = createApi({
           time: formatChatClock(sentAt),
           sentAt,
           status: "sending",
-          text: arg.text,
+          text: hasMedia ? undefined : arg.text,
+          caption:
+            arg.caption ||
+            (hasMedia ? arg.text : undefined) ||
+            undefined,
           duration: arg.duration,
-          mediaUrl: blobUrl,
+          mediaUrl: blobUrls[0] || links[0],
+          fileName: uploads[0]?.name,
+          fileSize: uploads[0] ? formatFileSize(uploads[0].size) : undefined,
+          attachments: optimisticAttachments.length
+            ? optimisticAttachments
+            : undefined,
           seenCount: 0,
+          seenBy: [],
         }
         dispatch(
           messagesApi.util.updateQueryData(
@@ -286,13 +352,22 @@ export const messagesApi = createApi({
           const saved: ChatMessage = {
             ...data,
             type: asMessageType(data.type || arg.type),
-            mediaUrl: data.mediaUrl || blobUrl,
+            mediaUrl: data.mediaUrl || blobUrls[0] || links[0],
+            attachments: data.attachments?.length
+              ? data.attachments
+              : optimistic.attachments,
             duration: data.duration || arg.duration,
+            caption: data.caption || arg.caption,
+            fileName: data.fileName || uploads[0]?.name,
+            fileSize:
+              data.fileSize ||
+              (uploads[0] ? formatFileSize(uploads[0].size) : undefined),
             status:
               data.status === "seen" || data.status === "delivered"
                 ? data.status
                 : "sent",
-            seenCount: data.seenCount ?? 0,
+            seenCount: data.seenCount ?? data.seenBy?.length ?? 0,
+            seenBy: data.seenBy ?? [],
           }
           dispatch(
             messagesApi.util.updateQueryData(
@@ -308,7 +383,9 @@ export const messagesApi = createApi({
             )
           )
           dispatch(bumpConversationPreview(arg.conversationId, saved))
-          if (blobUrl && data.mediaUrl) URL.revokeObjectURL(blobUrl)
+          for (const url of blobUrls) {
+            if (data.mediaUrl || data.attachments?.length) URL.revokeObjectURL(url)
+          }
         } catch {
           dispatch(
             messagesApi.util.updateQueryData(
@@ -319,7 +396,7 @@ export const messagesApi = createApi({
               }
             )
           )
-          if (blobUrl) URL.revokeObjectURL(blobUrl)
+          for (const url of blobUrls) URL.revokeObjectURL(url)
         }
       },
     }),
@@ -385,7 +462,7 @@ export const messagesApi = createApi({
       query: ({ messageId, scope = "me" }) => ({
         url: `/api/messages/${messageId}`,
         method: "DELETE",
-        data: { scope },
+        params: { scope },
       }),
       invalidatesTags: (_result, _error, arg) => [
         { type: "Messages", id: arg.conversationId },

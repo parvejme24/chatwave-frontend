@@ -38,6 +38,7 @@ import {
   messageFromDto,
   previewFromMessage,
   seenCountFromReceipts,
+  seenPeopleFromUnknown,
   statusFromReceipts,
   type ChatMessage,
   type ConversationsList,
@@ -310,15 +311,22 @@ export function SocketBridge() {
           (draft: MessagesPage) => {
             const row = draft.messages.find((item) => item.id === messageId)
             if (!row) return
+            const viewers = seenPeopleFromUnknown(
+              record.seenBy ?? receipts,
+              row.senderId
+            )
             const seenCount =
               typeof record.seenCount === "number"
                 ? record.seenCount
-                : seenCountFromReceipts(receipts, row.senderId)
+                : viewers.length > 0
+                  ? viewers.length
+                  : seenCountFromReceipts(receipts, row.senderId)
             const status =
               asMessageStatus(record.status) ||
               statusFromReceipts(receipts, row.senderId) ||
               (seenCount > 0 ? "seen" : row.status)
             row.seenCount = seenCount
+            if (viewers.length > 0) row.seenBy = viewers
             if (status && status !== "sending") row.status = status
           }
         )

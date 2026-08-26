@@ -4,6 +4,7 @@ import { useMemo, useState } from "react"
 
 import { AllContactsCard } from "./all-contacts-card"
 import { ContactSearch } from "./contact-search"
+import { FollowingCard } from "./following-card"
 import { OnlineCard } from "./online-card"
 import { SuggestionsCard } from "./suggestions-card"
 import { filterContacts } from "../../lib/data/contacts"
@@ -11,13 +12,16 @@ import { useDebouncedValue } from "../../lib/hooks/use-debounced-value"
 import { selectAccessToken, selectAuthUser } from "../../lib/store/auth-slice"
 import {
   useGetContactSuggestionsQuery,
-  useGetContactsQuery,
   useGetOnlineContactsQuery,
+  useListFollowingQuery,
 } from "../../lib/store/contacts-api"
 import { useAppSelector } from "../../lib/store/hooks"
-import { useSearchUsersQuery, useGetOnlineUsersQuery } from "../../lib/store/users-api"
-import { contactFromDto } from "../../lib/types/contact"
-import { contactFromPublicUser, sortContacts } from "../../lib/users"
+import { useListUsersQuery } from "../../lib/store/users-api"
+import {
+  contactFromDirectoryUser,
+  contactFromDto,
+} from "../../lib/types/contact"
+import { sortContacts } from "../../lib/users"
 
 export function ContactsPage() {
   const me = useAppSelector(selectAuthUser)
@@ -25,62 +29,88 @@ export function ContactsPage() {
   const [query, setQuery] = useState("")
   const debounced = useDebouncedValue(query.trim(), 300)
   const searching = debounced.length > 0
-  const { data: list } = useGetContactsQuery()
+  const {
+    data: directory,
+    isFetching: loadingContacts,
+    isError: contactsFailed,
+  } = useListUsersQuery(
+    searching ? { q: debounced, limit: 200 } : { limit: 200 },
+    { skip: !token }
+  )
+  const {
+    data: followingList,
+    isFetching: loadingFollowing,
+    isError: followingFailed,
+  } = useListFollowingQuery(undefined, { skip: !token })
   const {
     data: onlineList,
     isFetching: loadingOnline,
     isError: onlineFailed,
-  } = useGetOnlineContactsQuery()
+  } = useGetOnlineContactsQuery(undefined, { skip: !token })
   const { data: suggestionResults, isFetching: loadingSuggestions } =
-    useGetContactSuggestionsQuery(undefined, { skip: searching })
-  const {
-    data: directory,
-    isFetching: loadingDirectory,
-    isError: directoryFailed,
-  } = useSearchUsersQuery({ limit: 100 }, { skip: !token })
-  const { data: onlineUsers } = useGetOnlineUsersQuery(undefined, {
-    skip: !token,
-  })
-  const { data: searchHits, isFetching: searchingPeople } = useSearchUsersQuery(
-    { q: debounced, limit: 40 },
-    { skip: !token || debounced.length < 2 }
-  )
+    useGetContactSuggestionsQuery(undefined, { skip: !token || searching })
 
-  const savedIds = useMemo(() => {
+  const followingIds = useMemo(() => {
     const ids = new Set<string>()
-    for (const contact of list?.contacts ?? []) {
+    for (const contact of followingList?.contacts ?? []) {
       if (contact.id) ids.add(contact.id)
     }
+    for (const user of directory?.users ?? []) {
+      if (user.following && user.id) ids.add(user.id)
+    }
+    for (const contact of onlineList?.contacts ?? []) {
+      if (contact.following && contact.id) ids.add(contact.id)
+    }
     return ids
-  }, [list])
-  const online = useMemo(() => {
-    const rows = (onlineList?.contacts ?? []).map(contactFromDto)
+  }, [directory, followingList, onlineList])
+
+  const following = useMemo(() => {
+    const rows = (followingList?.contacts ?? [])
+      .map(contactFromDto)
+      .filter((person) => person.id !== me?.id)
+      .map((person) => ({ ...person, following: true }))
     return sortContacts(filterContacts(rows, query))
-  }, [onlineList, query])
+  }, [followingList, me?.id, query])
+
+  const online = useMemo(() => {
+    const rows = (onlineList?.contacts ?? [])
+      .map(contactFromDto)
+      .filter((person) => person.id !== me?.id)
+      .map((person) => ({
+        ...person,
+        following: Boolean(
+          person.following || (person.id && followingIds.has(person.id))
+        ),
+      }))
+    return sortContacts(filterContacts(rows, query))
+  }, [followingIds, me?.id, onlineList, query])
+
   const suggestions = useMemo(
-    () => (suggestionResults ?? []).map(contactFromDto),
-    [suggestionResults]
+    () =>
+      (suggestionResults ?? [])
+        .map(contactFromDto)
+        .filter((person) => person.id !== me?.id)
+        .map((person) => ({
+          ...person,
+          following: Boolean(
+            person.following || (person.id && followingIds.has(person.id))
+          ),
+        })),
+    [followingIds, me?.id, suggestionResults]
   )
-  const directoryPeople = useMemo(() => {
-    const byId = new Map<string, ReturnType<typeof contactFromPublicUser>>()
-    for (const person of directory ?? []) {
-      if (person.id === me?.id) continue
-      byId.set(person.id, contactFromPublicUser(person))
-    }
-    for (const person of onlineUsers ?? []) {
-      if (person.id === me?.id) continue
-      byId.set(person.id, contactFromPublicUser(person))
-    }
-    for (const person of searchHits ?? []) {
-      if (person.id === me?.id) continue
-      byId.set(person.id, contactFromPublicUser(person))
-    }
-    for (const contact of list?.contacts ?? []) {
-      if (!contact.id || contact.id === me?.id || byId.has(contact.id)) continue
-      byId.set(contact.id, contactFromDto(contact))
-    }
-    return sortContacts(filterContacts([...byId.values()], query))
-  }, [directory, list, me?.id, onlineUsers, query, searchHits])
+
+  const allPeople = useMemo(() => {
+    const rows = (directory?.users ?? [])
+      .map(contactFromDirectoryUser)
+      .filter((person) => person.id !== me?.id)
+      .map((person) => ({
+        ...person,
+        following: Boolean(
+          person.following || (person.id && followingIds.has(person.id))
+        ),
+      }))
+    return sortContacts(filterContacts(rows, query))
+  }, [directory, followingIds, me?.id, query])
 
   return (
     <section className="h-dvh overflow-y-auto bg-paper max-[859px]:pb-[calc(74px+env(safe-area-inset-bottom))]">
@@ -90,7 +120,7 @@ export function ContactsPage() {
             Contacts
           </h1>
           <p className="mt-[5px] text-[14.5px] text-ink-3">
-            People you can message or call directly.
+            Follow someone to save them and start a chat.
           </p>
         </header>
 
@@ -99,8 +129,13 @@ export function ContactsPage() {
           contacts={online}
           loading={loadingOnline}
           error={onlineFailed}
-          total={onlineList?.total ?? list?.total}
-          onlineCount={onlineList?.onlineCount ?? list?.onlineCount}
+          total={onlineList?.total ?? directory?.total}
+          onlineCount={onlineList?.onlineCount ?? directory?.onlineCount}
+        />
+        <FollowingCard
+          contacts={following}
+          loading={loadingFollowing}
+          error={followingFailed}
         />
         {searching ? null : (
           <SuggestionsCard
@@ -109,11 +144,11 @@ export function ContactsPage() {
           />
         )}
         <AllContactsCard
-          contacts={directoryPeople}
-          savedIds={savedIds}
-          loading={loadingDirectory || searchingPeople}
-          error={directoryFailed}
+          contacts={allPeople}
+          loading={loadingContacts}
+          error={contactsFailed && !directory?.users.length}
           searching={searching}
+          total={directory?.total}
         />
       </div>
     </section>

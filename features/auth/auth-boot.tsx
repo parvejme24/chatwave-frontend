@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect } from "react"
+import { useLayoutEffect } from "react"
 import { toast } from "sonner"
 
 import { persistAccessToken } from "../../lib/api/client"
@@ -12,7 +12,7 @@ export function AuthBoot({ children }: { children: React.ReactNode }) {
   const dispatch = useAppDispatch()
   const [getMe] = useLazyGetMeQuery()
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const tokenFromUrl = params.get("accessToken") || params.get("token")
 

@@ -1,24 +1,37 @@
 "use client"
 
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
-import { Pin, Search, Trash2 } from "lucide-react"
+import { EyeOff, Pin, Search, Trash2, Users } from "lucide-react"
 import { useEffect, useMemo, useRef } from "react"
 import { toast } from "sonner"
 
 import { CallLog } from "./bubbles/call-log"
+import { AttachmentsBubble } from "./bubbles/attachments-bubble"
 import { FileBubble } from "./bubbles/file-bubble"
 import { ImageBubble } from "./bubbles/image-bubble"
 import { TextBubble } from "./bubbles/text-bubble"
 import { TypingIndicator } from "./bubbles/typing-indicator"
+import { VideoFileBubble } from "./bubbles/video-file-bubble"
 import { VideoNote } from "./bubbles/video-note"
 import { VoiceBubble } from "./bubbles/voice-bubble"
-import { MessageMeta } from "./bubbles/message-meta"
+import { MessageMeta, SendingLabel } from "./bubbles/message-meta"
+import { SeenByRow } from "./bubbles/seen-by"
 import { chatActionError, useChat } from "./chat-provider"
 import { signalEase } from "../../components/motion/motion-item"
 import { useSettings } from "../settings/settings-provider"
 import { UserAvatar } from "../../components/shared/user-avatar"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "../../components/ui/dropdown-menu"
 import { ScrollArea } from "../../components/ui/scroll-area"
 import { profileHandle } from "../../lib/data/settings"
+import { useGetConversationMembersQuery } from "../../lib/store/conversations-api"
+import { useAppSelector } from "../../lib/store/hooks"
+import { looksLikeVideoFile } from "../../lib/files"
 import type {
   ChatMessage,
   Conversation,
@@ -28,9 +41,9 @@ import type {
 import {
   filterThreadItems,
   isOutgoingMessage,
+  resolveSeenPeople,
   SENDER_TONES,
 } from "../../lib/types/chat"
-import { useAppSelector } from "../../lib/store/hooks"
 import { cn } from "../../lib/utils"
 
 export function MessageList({
@@ -44,6 +57,13 @@ export function MessageList({
 }) {
   const { toggleReaction, togglePinMessage, deleteMessage, openProfile, me } =
     useChat()
+  const { data: members } = useGetConversationMembersQuery(conversation.id, {
+    skip: !conversation.id || !conversation.group,
+  })
+  const thread = {
+    ...conversation,
+    members: members ?? conversation.members,
+  }
   const { profile } = useSettings()
   const reduceMotion = useReducedMotion()
   const endRef = useRef<HTMLDivElement>(null)
@@ -67,13 +87,6 @@ export function MessageList({
   const lastStatus =
     lastOutgoing && lastOutgoing.kind === "message" ? lastOutgoing.status : null
   const filtering = view === "pinned" || query.trim().length > 0
-  const peerCount = conversation.group
-    ? Math.max(
-        0,
-        conversation.members?.filter((member) => !member.isMe).length ||
-          Math.max(0, (conversation.members?.length ?? 1) - 1)
-      )
-    : 1
 
   useEffect(() => {
     if (filtering) return
@@ -277,11 +290,7 @@ export function MessageList({
                     outgoing && "flex-row-reverse"
                   )}
                 >
-                  <MessageBody
-                    message={item}
-                    outgoing={outgoing}
-                    seenTotal={peerCount}
-                  />
+                  <MessageBody message={item} outgoing={outgoing} />
                   <button
                     type="button"
                     aria-label={item.pinned ? "Unpin message" : "Pin message"}
@@ -307,22 +316,24 @@ export function MessageList({
                       aria-hidden
                     />
                   </button>
-                  <button
-                    type="button"
-                    aria-label="Delete message"
-                    onClick={() => {
-                      void deleteMessage(conversation.id, item.id)
-                        .then(() => toast("Message deleted"))
+                  <DeleteMessageButton
+                    outgoing={outgoing}
+                    onDelete={(scope) => {
+                      void deleteMessage(conversation.id, item.id, scope)
+                        .then(() =>
+                          toast(
+                            scope === "everyone"
+                              ? "Message deleted for everyone"
+                              : "Message deleted"
+                          )
+                        )
                         .catch((error) =>
                           toast.error(
                             chatActionError(error, "Could not delete message")
                           )
                         )
                     }}
-                    className="mb-1 grid size-7 shrink-0 cursor-pointer place-items-center rounded-[8px] text-ink-4 opacity-70 transition-opacity hover:bg-surface-2 hover:text-pulse focus-visible:opacity-100 max-[859px]:opacity-70 min-[860px]:opacity-0 min-[860px]:group-hover:opacity-100 min-[860px]:group-focus-within:opacity-100"
-                  >
-                    <Trash2 className="size-3.5 stroke-[1.75]" aria-hidden />
-                  </button>
+                  />
                 </div>
                 {item.reactions?.length ? (
                   <div className="flex gap-1 px-1">
@@ -356,6 +367,23 @@ export function MessageList({
                     ))}
                   </div>
                 ) : null}
+                <MessageMeta
+                  time={item.time}
+                  status={item.status}
+                  outgoing={outgoing}
+                  latest={lastOutgoing?.id === item.id}
+                  seen={Boolean(
+                    item.status === "seen" ||
+                      (item.seenCount && item.seenCount > 0) ||
+                      item.seenBy?.length
+                  )}
+                />
+                {outgoing ? (
+                  <SeenByRow
+                    people={resolveSeenPeople(item, thread, me.id)}
+                    count={item.seenCount}
+                  />
+                ) : null}
               </div>
             </motion.div>
           )
@@ -370,64 +398,124 @@ export function MessageList({
 function MessageBody({
   message,
   outgoing,
-  seenTotal = 0,
 }: {
   message: ChatMessage
   outgoing: boolean
-  seenTotal?: number
 }) {
+  const multi =
+    (message.attachments?.length ?? 0) > 1 ||
+    message.attachments?.some((item) => item.kind === "link")
+  if (multi) {
+    return <AttachmentsBubble message={message} outgoing={outgoing} />
+  }
+
   switch (message.type) {
     case "image":
-      return (
-        <ImageBubble
-          message={message}
-          outgoing={outgoing}
-          seenTotal={seenTotal}
-        />
-      )
+      return <ImageBubble message={message} outgoing={outgoing} />
+    case "video":
+      return <VideoFileBubble message={message} outgoing={outgoing} />
     case "file":
-      return (
-        <FileBubble
-          message={message}
-          outgoing={outgoing}
-          seenTotal={seenTotal}
-        />
-      )
+      if (looksLikeVideoFile(message.fileName || message.mediaUrl)) {
+        return <VideoFileBubble message={message} outgoing={outgoing} />
+      }
+      if (message.attachments?.length) {
+        return <AttachmentsBubble message={message} outgoing={outgoing} />
+      }
+      return <FileBubble message={message} outgoing={outgoing} />
     case "voice":
-      return (
-        <VoiceBubble
-          message={message}
-          outgoing={outgoing}
-          seenTotal={seenTotal}
-        />
-      )
+      return <VoiceBubble message={message} outgoing={outgoing} />
     case "video_note":
       return (
-        <div className={cn("flex flex-col gap-1", outgoing ? "items-end" : "items-start")}>
-          <div className="relative">
-            <VideoNote duration={message.duration} src={message.mediaUrl} />
-            {outgoing && message.status === "sending" ? (
-              <span className="absolute inset-0 grid place-items-center rounded-[18px] bg-[rgba(10,14,20,0.55)] font-mono text-[12px] font-semibold text-white">
-                Sending...
-              </span>
-            ) : null}
-          </div>
-          <MessageMeta
-            time={message.time}
-            status={message.status}
-            outgoing={outgoing}
-            seenCount={message.seenCount}
-            seenTotal={seenTotal}
-          />
+        <div className="relative">
+          <VideoNote duration={message.duration} src={message.mediaUrl} />
+          {outgoing && message.status === "sending" ? (
+            <span className="absolute inset-0 grid place-items-center rounded-[18px] bg-[rgba(10,14,20,0.55)] font-mono text-[12px] font-semibold text-white">
+              <SendingLabel />
+            </span>
+          ) : null}
         </div>
       )
     default:
-      return (
-        <TextBubble
-          message={message}
-          outgoing={outgoing}
-          seenTotal={seenTotal}
-        />
-      )
+      return <TextBubble message={message} outgoing={outgoing} />
   }
+}
+
+const deleteTriggerClass =
+  "mb-1 grid size-8 shrink-0 cursor-pointer place-items-center rounded-[10px] border border-transparent text-ink-4 opacity-70 transition-[opacity,background-color,color,border-color,transform] hover:border-pulse/20 hover:bg-pulse-wash hover:text-pulse hover:opacity-100 active:scale-95 focus-visible:opacity-100 max-[859px]:opacity-70 min-[860px]:opacity-0 min-[860px]:group-hover:opacity-100 min-[860px]:group-focus-within:opacity-100"
+
+function DeleteMessageButton({
+  outgoing,
+  onDelete,
+}: {
+  outgoing: boolean
+  onDelete: (scope: "me" | "everyone") => void
+}) {
+  if (!outgoing) {
+    return (
+      <button
+        type="button"
+        aria-label="Delete message for me"
+        onClick={() => onDelete("me")}
+        className={deleteTriggerClass}
+      >
+        <Trash2 className="size-3.5 stroke-[1.75]" aria-hidden />
+      </button>
+    )
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        aria-label="Delete message"
+        className={deleteTriggerClass}
+      >
+        <Trash2 className="size-3.5 stroke-[1.75]" aria-hidden />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="end"
+        sideOffset={8}
+        className="min-w-[248px] rounded-[16px] border border-edge bg-surface p-1.5 shadow-[0_12px_40px_rgba(17,24,33,0.14),0_2px_8px_rgba(17,24,33,0.06)]"
+      >
+        <div className="px-2.5 pt-2 pb-1.5">
+          <p className="text-[11px] font-semibold tracking-[0.06em] text-ink-3 uppercase">
+            Delete message
+          </p>
+        </div>
+        <DropdownMenuItem
+          onClick={() => onDelete("me")}
+          className="cursor-pointer items-start gap-3 rounded-[12px] px-2.5 py-2.5 focus:bg-surface-2"
+        >
+          <span className="mt-0.5 grid size-9 shrink-0 place-items-center rounded-[11px] bg-surface-2 text-ink-2 ring-1 ring-edge">
+            <EyeOff className="size-4 stroke-[1.75]" aria-hidden />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[13.5px] font-semibold text-ink">
+              Delete for me
+            </span>
+            <span className="mt-0.5 block text-[12px] leading-snug text-ink-3">
+              Hide this message only on your side
+            </span>
+          </span>
+        </DropdownMenuItem>
+        <DropdownMenuSeparator className="my-1.5 bg-edge" />
+        <DropdownMenuItem
+          variant="destructive"
+          onClick={() => onDelete("everyone")}
+          className="cursor-pointer items-start gap-3 rounded-[12px] px-2.5 py-2.5 focus:bg-pulse-wash"
+        >
+          <span className="mt-0.5 grid size-9 shrink-0 place-items-center rounded-[11px] bg-pulse-wash text-pulse ring-1 ring-pulse/20">
+            <Users className="size-4 stroke-[1.75]" aria-hidden />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[13.5px] font-semibold text-pulse">
+              Delete for everyone
+            </span>
+            <span className="mt-0.5 block text-[12px] leading-snug text-pulse/80">
+              Remove this message for all chat members
+            </span>
+          </span>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
 }

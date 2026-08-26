@@ -8,7 +8,7 @@ const backendOrigin = (
 
 const nextConfig: NextConfig = {
   experimental: {
-    proxyClientMaxBodySize: "25mb",
+    proxyClientMaxBodySize: "55mb",
   },
   async rewrites() {
     return [

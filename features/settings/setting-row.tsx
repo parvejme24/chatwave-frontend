@@ -5,11 +5,13 @@ export function SettingRow({
   hint,
   children,
   className,
+  controlClassName,
 }: {
   title: string
   hint: string
   children: React.ReactNode
   className?: string
+  controlClassName?: string
 }) {
   return (
     <div
@@ -22,7 +24,9 @@ export function SettingRow({
         <h4 className="text-[14.5px] font-semibold text-ink">{title}</h4>
         <p className="mt-0.5 text-[13px] text-ink-3">{hint}</p>
       </div>
-      <div className="shrink-0">{children}</div>
+      <div className={cn("min-w-0", controlClassName ?? "shrink-0")}>
+        {children}
+      </div>
     </div>
   )
 }

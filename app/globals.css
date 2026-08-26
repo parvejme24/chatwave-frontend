@@ -207,6 +207,19 @@
   }
 }
 
+@keyframes cw-sending-dot {
+  0%,
+  20% {
+    opacity: 0.2;
+  }
+  40% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.2;
+  }
+}
+
 @keyframes cw-rec {
   0%,
   100% {

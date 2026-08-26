@@ -100,6 +100,7 @@ export function DetailsDrawer({ conversationId }: { conversationId: string }) {
     removeGroupMember,
     setGroupAdmin,
     leaveGroup,
+    deleteConversation,
   } = useChat()
   const [blockUser] = useBlockUserMutation()
   const fromList = getConversation(conversationId)
@@ -194,6 +195,14 @@ export function DetailsDrawer({ conversationId }: { conversationId: string }) {
           } catch (error) {
             toast.error(chatActionError(error, "Could not update archive"))
           }
+        }}
+        onDelete={async () => {
+          if (!(await deleteConversation(conversation.id))) {
+            toast.error("Could not delete this conversation")
+            return
+          }
+          toast("Conversation deleted")
+          router.push("/chats")
         }}
         onBlock={async () => {
           const userId =
@@ -302,6 +311,7 @@ function DrawerBody({
   onLeave,
   onArchive,
   onBlock,
+  onDelete,
   reduceMotion,
 }: {
   conversation: Conversation
@@ -316,6 +326,7 @@ function DrawerBody({
   onLeave: () => void
   onArchive: () => void
   onBlock: () => void
+  onDelete: () => void
   reduceMotion: boolean
 }) {
   const { startCall, isStarting } = useStartCall()
@@ -632,7 +643,7 @@ function DrawerBody({
               )}
               <button
                 type="button"
-                onClick={() => toast("Deleting chats is not available yet")}
+                onClick={onDelete}
                 className="flex w-full cursor-pointer items-center justify-between py-[11px] text-left"
               >
                 <span className="flex items-center gap-[11px] text-sm text-pulse">

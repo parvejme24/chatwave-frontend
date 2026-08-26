@@ -87,6 +87,7 @@ function messageDetail(message: ChatMessage) {
   if (message.type === "voice") {
     return `Voice message · ${message.duration ?? 0}s`
   }
+  if (message.type === "video") return message.fileName || "Sent a video"
   if (message.type === "video_note") {
     return `Video note · ${message.duration ?? 0}s`
   }

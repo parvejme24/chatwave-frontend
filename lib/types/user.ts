@@ -31,6 +31,21 @@ export type SearchUsersArgs = {
   limit?: number
 }
 
+export type DirectoryUser = PublicUser & {
+  following?: boolean
+  note?: string
+  hrefChat?: string
+  hrefAudio?: string
+  hrefVideo?: string
+  user?: string
+}
+
+export type UsersDirectoryList = {
+  users: DirectoryUser[]
+  total: number
+  onlineCount: number
+}
+
 export type PresenceUpdate = {
   presence: Presence
   lastSeenAt: string | null

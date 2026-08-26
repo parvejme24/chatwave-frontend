@@ -14,6 +14,14 @@ export type Reaction = {
   mine: boolean
 }
 
+export type SeenByPerson = {
+  id: string
+  name?: string
+  initials: string
+  tone: AvatarTone
+  photo?: string | null
+}
+
 export type DayItem = {
   id: string
   kind: "day"
@@ -33,13 +41,22 @@ export type TypingItem = {
   kind: "typing"
 }
 
+export type MessageAttachment = {
+  url: string
+  fileName?: string
+  fileSize?: string
+  mimeType?: string
+  duration?: number
+  kind: "image" | "video" | "file" | "link"
+}
+
 export type ChatMessage = {
   id: string
   kind: "message"
   conversationId?: string
   senderId?: string
   dir: "in" | "out"
-  type: "text" | "image" | "file" | "voice" | "video_note"
+  type: "text" | "image" | "file" | "voice" | "video_note" | "video"
   time: string
   status?: MessageStatus
   text?: string
@@ -56,8 +73,10 @@ export type ChatMessage = {
   pinned?: boolean
   sentAt?: string
   mediaUrl?: string
+  attachments?: MessageAttachment[]
   senderPhoto?: string | null
   seenCount?: number
+  seenBy?: SeenByPerson[]
 }
 
 export type ThreadItem = DayItem | CallItem | TypingItem | ChatMessage
@@ -292,6 +311,14 @@ export type MessageDto = {
   fileUrl?: string
   audioUrl?: string
   videoUrl?: string
+  attachments?: Array<{
+    url?: string
+    fileName?: string
+    fileSize?: string
+    mimeType?: string
+    duration?: number
+    kind?: string
+  }>
   file?: { url?: string; secureUrl?: string; secure_url?: string }
   media?: { url?: string; secureUrl?: string; secure_url?: string }
   time: string
@@ -317,6 +344,7 @@ export type MessageDto = {
     status?: MessageStatus | string
   }>
   seenCount?: number
+  seenBy?: unknown
 }
 
 export function entityId(value: unknown): string {
@@ -349,7 +377,21 @@ export function isOutgoingMessage(message: ChatMessage, viewerId?: string) {
 export function previewFromMessage(message: ChatMessage) {
   if (message.text?.trim()) return message.text
   if (message.caption?.trim()) return message.caption
+  const attachments = message.attachments ?? []
+  if (attachments.length > 1) {
+    if (attachments.every((item) => item.kind === "image")) {
+      return `${attachments.length} photos`
+    }
+    if (attachments.every((item) => item.kind === "link")) {
+      return `${attachments.length} links`
+    }
+    return `${attachments.length} files`
+  }
+  if (attachments[0]?.kind === "link") {
+    return attachments[0].fileName || "Link"
+  }
   if (message.type === "image") return "Photo"
+  if (message.type === "video") return message.fileName || "Video"
   if (message.type === "file") return message.fileName || "File"
   if (message.type === "voice") return "Voice message"
   if (message.type === "video_note") return "Video note"
@@ -457,6 +499,154 @@ export function asMessageStatus(value: unknown): MessageStatus | undefined {
   return undefined
 }
 
+export function seenByIds(value: unknown): string[] {
+  return seenPeopleFromUnknown(value).map((person) => person.id)
+}
+
+export function seenPeopleFromUnknown(
+  value: unknown,
+  senderId?: string
+): SeenByPerson[] {
+  if (!Array.isArray(value)) return []
+  const people: SeenByPerson[] = []
+  const seen = new Set<string>()
+  for (const item of value) {
+    const person = seenPersonFromUnknown(item)
+    if (!person) continue
+    if (senderId && idsEqual(person.id, senderId)) continue
+    if (seen.has(person.id)) continue
+    seen.add(person.id)
+    people.push(person)
+  }
+  return people
+}
+
+function seenPersonFromUnknown(item: unknown): SeenByPerson | null {
+  if (typeof item === "string") {
+    const id = item.trim()
+    return id ? { id, initials: "?", tone: "a" } : null
+  }
+  if (!item || typeof item !== "object") return null
+  const record = item as Record<string, unknown>
+  const nested =
+    record.user && typeof record.user === "object"
+      ? (record.user as Record<string, unknown>)
+      : record.viewer && typeof record.viewer === "object"
+        ? (record.viewer as Record<string, unknown>)
+        : null
+  const source = nested ?? record
+  const id =
+    personId(record.userId) ||
+    personId(record.user) ||
+    personId(record.viewer) ||
+    personId(nested) ||
+    entityId(record)
+  if (!id) return null
+  if (record.status && record.status !== "seen" && record.seen !== true) {
+    return null
+  }
+  const name =
+    (typeof source.name === "string" && source.name) ||
+    (typeof record.name === "string" && record.name) ||
+    undefined
+  const initials =
+    (typeof source.initials === "string" && source.initials) ||
+    (typeof record.initials === "string" && record.initials) ||
+    initialsFromName(name)
+  const tone = asAvatarTone(source.tone) || asAvatarTone(record.tone) || "a"
+  const photo =
+    (typeof source.photoUrl === "string" && source.photoUrl) ||
+    (typeof source.photo === "string" && source.photo) ||
+    (typeof record.photoUrl === "string" && record.photoUrl) ||
+    (typeof record.photo === "string" && record.photo) ||
+    null
+  return { id, name, initials, tone, photo }
+}
+
+function initialsFromName(name?: string) {
+  if (!name?.trim()) return "?"
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return parts
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase()
+}
+
+function asAvatarTone(value: unknown): AvatarTone | undefined {
+  if (
+    value === "a" ||
+    value === "b" ||
+    value === "c" ||
+    value === "d" ||
+    value === "e" ||
+    value === "f"
+  ) {
+    return value
+  }
+  return undefined
+}
+
+export function seenCountFromSeenBy(seenBy: unknown, senderId?: string) {
+  return seenPeopleFromUnknown(seenBy, senderId).length
+}
+
+export function resolveSeenPeople(
+  message: ChatMessage,
+  conversation: Conversation,
+  viewerId?: string
+): SeenByPerson[] {
+  const senderId = message.senderId || viewerId
+  const fromMessage = (message.seenBy ?? []).filter(
+    (person) => !senderId || !idsEqual(person.id, senderId)
+  )
+  const members = conversation.members ?? []
+  const byId = new Map(members.map((member) => [member.id, member]))
+  const resolved = fromMessage.map((person) => {
+    const member = byId.get(person.id)
+    if (!member) return person
+    return {
+      id: person.id,
+      name: person.name || member.name,
+      initials: person.initials !== "?" ? person.initials : member.initials,
+      tone: person.tone || member.tone,
+      photo: person.photo || member.photo,
+    }
+  })
+  if (resolved.length > 0) return resolved
+  const seen = Math.max(0, message.seenCount ?? 0)
+  if (seen === 0 && message.status !== "seen") return []
+  const peers = members.filter(
+    (member) =>
+      !member.isMe && (!senderId || !idsEqual(member.id, senderId))
+  )
+  if (conversation.group) return peers.slice(0, seen || peers.length).map(memberToSeen)
+  if (peers[0]) return [memberToSeen(peers[0])]
+  if (message.status === "seen" || seen > 0) {
+    return [
+      {
+        id: conversation.id,
+        name: conversation.name,
+        initials: conversation.initials,
+        tone: conversation.tone,
+        photo: conversation.photoUrl,
+      },
+    ]
+  }
+  return []
+}
+
+function memberToSeen(member: GroupMember): SeenByPerson {
+  return {
+    id: member.id,
+    name: member.name,
+    initials: member.initials,
+    tone: member.tone,
+    photo: member.photo,
+  }
+}
+
 export function seenCountFromReceipts(receipts: unknown, senderId?: string) {
   if (typeof receipts === "number" && Number.isFinite(receipts)) {
     return Math.max(0, Math.floor(receipts))
@@ -500,11 +690,17 @@ export function statusFromReceipts(
 }
 
 export function asMessageType(value: unknown): ChatMessage["type"] {
-  if (value === "image" || value === "file" || value === "voice" || value === "video_note") {
+  if (
+    value === "image" ||
+    value === "file" ||
+    value === "voice" ||
+    value === "video_note" ||
+    value === "video"
+  ) {
     return value
   }
   if (value === "audio" || value === "voice_note") return "voice"
-  if (value === "video" || value === "videoNote") return "video_note"
+  if (value === "videoNote") return "video_note"
   return "text"
 }
 
@@ -535,8 +731,51 @@ function mediaUrlFromDto(dto: MessageDto) {
     (typeof dto.videoUrl === "string" && dto.videoUrl) ||
     nestedUrl(dto.file) ||
     nestedUrl(dto.media) ||
+    (Array.isArray(dto.attachments) &&
+    typeof dto.attachments[0]?.url === "string"
+      ? dto.attachments[0].url
+      : "") ||
     ""
   )
+}
+
+function attachmentsFromDto(dto: MessageDto): MessageAttachment[] | undefined {
+  if (!Array.isArray(dto.attachments) || dto.attachments.length === 0) {
+    return undefined
+  }
+  const rows: MessageAttachment[] = []
+  for (const item of dto.attachments) {
+    if (!item || typeof item !== "object") continue
+    const url = typeof item.url === "string" ? item.url : ""
+    if (!url) continue
+    const mime = typeof item.mimeType === "string" ? item.mimeType : ""
+    const kindRaw = item.kind
+    const kind =
+      kindRaw === "image" ||
+      kindRaw === "video" ||
+      kindRaw === "file" ||
+      kindRaw === "link"
+        ? kindRaw
+        : mime.startsWith("image/")
+          ? "image"
+          : mime.startsWith("video/")
+            ? "video"
+            : mime === "text/uri-list"
+              ? "link"
+              : "file"
+    rows.push({
+      url,
+      fileName: typeof item.fileName === "string" ? item.fileName : undefined,
+      fileSize: typeof item.fileSize === "string" ? item.fileSize : undefined,
+      mimeType: mime || undefined,
+      duration:
+        typeof item.duration === "number" && item.duration > 0
+          ? item.duration
+          : undefined,
+      kind,
+    })
+  }
+  return rows.length ? rows : undefined
 }
 
 export function messageFromDto(
@@ -565,13 +804,21 @@ export function messageFromDto(
       ? "out"
       : "in"
   const type = asMessageType(dto.type)
+  const seenBy = [
+    ...seenPeopleFromUnknown(dto.seenBy, senderId),
+    ...seenPeopleFromUnknown(dto.receipts, senderId),
+  ].filter((person, index, list) =>
+    list.findIndex((item) => item.id === person.id) === index
+  )
   const seenCount =
     typeof dto.seenCount === "number"
       ? dto.seenCount
-      : seenCountFromReceipts(dto.receipts, senderId)
+      : seenBy.length > 0
+        ? seenBy.length
+        : seenCountFromReceipts(dto.receipts, senderId)
   const status =
     asMessageStatus(dto.status) ||
-    statusFromReceipts(dto.receipts, senderId)
+    (seenCount > 0 ? "seen" : statusFromReceipts(dto.receipts, senderId))
   return {
     id: entityId(dto.id) || entityId(dto),
     kind: "message",
@@ -583,17 +830,19 @@ export function messageFromDto(
     sentAt: dto.time,
     status,
     seenCount,
+    seenBy: seenBy.length > 0 ? seenBy : undefined,
     text: dto.text || undefined,
     caption: dto.caption || undefined,
     fileName: dto.fileName || undefined,
     fileSize: dto.fileSize || undefined,
     duration:
       asDuration(dto.duration) ||
-      (type === "voice" || type === "video_note"
+      (type === "voice" || type === "video_note" || type === "video"
         ? asDuration(dto.text)
         : undefined),
     seed: dto.seed || undefined,
     mediaUrl: mediaUrlFromDto(dto) || undefined,
+    attachments: attachmentsFromDto(dto),
     senderName: dto.senderName || dto.sender?.name,
     senderTone: dto.senderTone || dto.sender?.tone,
     senderInitials: dto.senderInitials || dto.sender?.initials,

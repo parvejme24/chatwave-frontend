@@ -16,6 +16,12 @@ import { selectSocketConnected } from "../../lib/store/realtime-slice"
 import { useAppSelector } from "../../lib/store/hooks"
 import type { RecordKind } from "../../lib/types/chat"
 import { cn } from "../../lib/utils"
+import {
+  MAX_CHAT_FILE_BYTES,
+  MAX_CHAT_FILES,
+  messageTypeForFiles,
+  sendLabelForType,
+} from "../../lib/files"
 
 function subscribeOnline(onStoreChange: () => void) {
   window.addEventListener("online", onStoreChange)
@@ -27,10 +33,11 @@ function subscribeOnline(onStoreChange: () => void) {
 }
 
 export function Composer({ conversationId }: { conversationId: string }) {
-  const { sendText, sendRecording } = useChat()
+  const { sendText, sendRecording, sendAttachment } = useChat()
   const socketConnected = useAppSelector(selectSocketConnected)
   const [value, setValue] = useState("")
   const [recording, setRecording] = useState<RecordKind | null>(null)
+  const [attaching, setAttaching] = useState(false)
   const online = useSyncExternalStore(
     subscribeOnline,
     () => navigator.onLine,
@@ -39,6 +46,7 @@ export function Composer({ conversationId }: { conversationId: string }) {
   const [emojiOpen, setEmojiOpen] = useState(false)
   const reduceMotion = useReducedMotion()
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
   const typingStop = useRef<number>(0)
 
@@ -120,6 +128,38 @@ export function Composer({ conversationId }: { conversationId: string }) {
     toast(kind === "voice" ? "Recording voice message" : "Recording video message")
   }
 
+  async function attachFiles(fileList: FileList | null) {
+    const picked = [...(fileList ?? [])]
+    if (!picked.length) return
+    const caption = value.trim()
+    setAttaching(true)
+    try {
+      const files: File[] = []
+      for (const file of picked) {
+        if (file.size > MAX_CHAT_FILE_BYTES) {
+          toast.error(`${file.name} is over 50 MB`)
+          continue
+        }
+        files.push(file)
+        if (files.length >= MAX_CHAT_FILES) {
+          toast.error(`You can attach up to ${MAX_CHAT_FILES} files`)
+          break
+        }
+      }
+      if (!files.length) return
+      try {
+        await sendAttachment(conversationId, files, caption || undefined)
+        toast(sendLabelForType(messageTypeForFiles(files), files.length))
+        if (caption) setValue("")
+      } catch (error) {
+        toast.error(chatActionError(error, "Could not send files"))
+      }
+    } finally {
+      setAttaching(false)
+      if (fileRef.current) fileRef.current.value = ""
+    }
+  }
+
   return (
     <footer className="shrink-0 border-t border-edge bg-surface px-5 pt-3 pb-4 max-[859px]:px-3 max-[859px]:pt-2.5 max-[859px]:pb-[calc(12px+env(safe-area-inset-bottom))]">
       <AnimatePresence mode="wait" initial={false}>
@@ -171,9 +211,19 @@ export function Composer({ conversationId }: { conversationId: string }) {
               />
             ) : null}
           </AnimatePresence>
+          <input
+            ref={fileRef}
+            type="file"
+            multiple
+            className="sr-only"
+            aria-hidden
+            tabIndex={-1}
+            onChange={(event) => void attachFiles(event.target.files)}
+          />
           <IconBtn
-            aria-label="Attach file"
-            onClick={() => toast("Attach a file")}
+            aria-label="Attach photo, video, or file"
+            disabled={attaching}
+            onClick={() => fileRef.current?.click()}
           >
             <Paperclip className="size-5 stroke-[1.75]" aria-hidden />
           </IconBtn>

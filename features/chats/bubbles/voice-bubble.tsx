@@ -3,7 +3,6 @@
 import { Pause, Play } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
 
-import { MessageMeta } from "./message-meta"
 import { useChat } from "../chat-provider"
 import { resolveMediaUrl } from "../../../lib/api"
 import type { ChatMessage } from "../../../lib/types/chat"
@@ -15,11 +14,9 @@ const RATES = [1, 1.5, 2] as const
 export function VoiceBubble({
   message,
   outgoing,
-  seenTotal = 0,
 }: {
   message: ChatMessage
   outgoing: boolean
-  seenTotal?: number
 }) {
   const { playingVoiceId, setPlayingVoiceId } = useChat()
   const src = resolveMediaUrl(message.mediaUrl)
@@ -179,9 +176,6 @@ export function VoiceBubble({
             </span>
           </span>
         </span>
-      </div>
-      <div className="mt-0.5 text-right">
-        <MessageMeta time={message.time} status={message.status} outgoing={outgoing} seenCount={message.seenCount} seenTotal={seenTotal} />
       </div>
     </div>
   )

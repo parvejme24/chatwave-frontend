@@ -13,16 +13,22 @@ const display = Bricolage_Grotesque({
   subsets: ["latin"],
   variable: "--font-bricolage",
   axes: ["opsz"],
+  display: "swap",
+  preload: false,
 })
 
 const sans = Inter_Tight({
   subsets: ["latin"],
   variable: "--font-inter-tight",
+  display: "swap",
+  preload: false,
 })
 
 const mono = JetBrains_Mono({
   subsets: ["latin"],
   variable: "--font-jetbrains",
+  display: "swap",
+  preload: false,
 })
 
 export const metadata: Metadata = {
@@ -49,7 +55,10 @@ export default function RootLayout({
       suppressHydrationWarning
       className={`${display.variable} ${sans.variable} ${mono.variable} h-full antialiased`}
     >
-      <body suppressHydrationWarning className="flex min-h-full flex-col font-sans">
+      <body
+        suppressHydrationWarning
+        className={`${sans.className} flex min-h-full flex-col font-sans`}
+      >
         <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>

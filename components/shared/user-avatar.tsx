@@ -27,19 +27,21 @@ type UserAvatarProps = {
 
 export function UserAvatar({
   initials,
-  tone,
+  tone = "a",
   photo,
   presence,
   showPresence = false,
   size = "md",
   className,
 }: UserAvatarProps) {
+  const label = initials || "?"
+  const color = AVATAR_TONES[tone] ?? AVATAR_TONES.a
   return (
     <span
       className={cn(
         "relative grid shrink-0 place-items-center rounded-full font-display font-semibold select-none",
         sizes[size],
-        !photo && AVATAR_TONES[tone],
+        !photo && color,
         photo && "bg-surface-3",
         className
       )}
@@ -51,7 +53,7 @@ export function UserAvatar({
           className="absolute inset-0 size-full rounded-full object-cover"
         />
       ) : (
-        <span className="relative z-[1]">{initials}</span>
+        <span className="relative z-[1]">{label}</span>
       )}
       {showPresence && presence ? (
         <i
