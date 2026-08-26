@@ -1,96 +1,169 @@
 # ChatWave
 
-Messaging, voice notes, and calls in one place — a Next.js frontend for real-time chat.
+**Real-time messaging, voice notes, and audio/video calls — in one modern web app.**
 
-**Repository:** [github.com/parvejme24/chatwave-frontend](https://github.com/parvejme24/chatwave-frontend.git)
+[![Live Demo](https://img.shields.io/badge/Live_Demo-chatwave--pvj.vercel.app-000000?style=for-the-badge&logo=vercel)](https://chatwave-pvj.vercel.app/)
+[![Next.js](https://img.shields.io/badge/Next.js-16-black?style=flat-square&logo=nextdotjs)](https://nextjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev/)
+[![Redux](https://img.shields.io/badge/Redux_Toolkit-RTK_Query-764ABC?style=flat-square&logo=redux&logoColor=white)](https://redux-toolkit.js.org/)
+[![Socket.IO](https://img.shields.io/badge/Socket.IO-Client-010101?style=flat-square&logo=socketdotio)](https://socket.io/)
+[![WebRTC](https://img.shields.io/badge/WebRTC-MediaStream-333333?style=flat-square&logo=webrtc&logoColor=white)](https://webrtc.org/)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind-v4-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
+
+**Live app:** [https://chatwave-pvj.vercel.app/](https://chatwave-pvj.vercel.app/)  
+**Repository:** [github.com/parvejme24/chatwave-frontend](https://github.com/parvejme24/chatwave-frontend)
 
 ---
 
-## Features
+## Description
 
-- **Auth** — Sign in, sign up, forgot password, Google and GitHub buttons
-- **Chats** — Threads, bubbles, reactions, emoji picker, voice and video notes
-- **Groups** — Create a group with a name and at least three people
-- **Profiles** — Open anyone from the list, header, or bubble avatar
-- **Calls** — Full-screen audio and video stage, incoming overlay, call history
-- **Contacts** — Searchable directory with presence
-- **Settings** — Profile, appearance, sounds, privacy, sessions
-- **Owner tools** — `/advanced` for account history, ban / unban, and delete (owner only)
-- **Theme** — Light, dark, and system, plus reduced motion
+ChatWave is a full-featured chat frontend built with **Next.js**, **Redux Toolkit**, **Socket.IO Client**, and **WebRTC media APIs**, connected to a live NestJS backend. It covers the full messaging loop: authentication, 1:1 and group chats, media sharing, contacts, presence, and audio/video calling — designed as a production-style product you can demo from a resume or portfolio.
 
-This UI is a working prototype. Most chat and admin state lives in memory for the session.
+The UI is feature-organized and type-safe. **Axios + RTK Query** talk to REST APIs, **Socket.IO Client** pushes realtime events (messages, presence, incoming calls), and **WebRTC** `getUserMedia` / `getDisplayMedia` power mic, camera, and screen share in the call experience.
+---
+
+## Key features
+
+### Messaging
+- Direct and **group** conversations with unread badges
+- Text, images, files, **voice notes**, and video messages
+- Reactions, emoji picker, link previews
+- Archive, hard-delete, and block flows
+- Centered **system messages** for group updates
+- Shared media gallery in conversation details
+
+### Calls (WebRTC media)
+- Full-screen **audio** and **video** call experience
+- **WebRTC** local media via `getUserMedia` (mic / camera) and `getDisplayMedia` (screen share)
+- Ringing sound while waiting; mute / camera / speaker unlock after answer
+- Screen share on **video** calls only; End always available
+- Incoming call overlay (Socket.IO) and call history
+
+### Contacts & social
+- Searchable contacts directory
+- Horizontal **people rail** with follow / unfollow
+- Online presence via **Socket.IO Client** realtime bridge
+
+### Account & settings
+- Email/password auth plus Google & GitHub sign-in options
+- Profile, appearance (light / dark / system), sounds, privacy
+- Owner-only **admin** tools at `/advanced`
+
+### UX polish
+- Shared loading skeletons across chats, calls, contacts, and auth
+- Responsive layout with desktop rail and mobile tab bar
+- Motion that respects reduced-motion preferences
 
 ---
 
 ## Tech stack
 
-| Layer | Choice |
+### Core
+| Layer | Technology |
 | --- | --- |
-| Framework | Next.js 16 (App Router) |
-| Language | TypeScript |
-| UI | React 19, Tailwind CSS v4, shadcn/ui |
-| Motion | Framer Motion |
-| Forms | React Hook Form + Zod |
-| Data | Axios + Redux Toolkit Query |
-| Icons | Lucide |
-| Toasts | Sonner |
-| Theming | next-themes |
+| Framework | **Next.js 16** (App Router) |
+| Language | **TypeScript** |
+| UI library | **React 19** |
+| Styling | **Tailwind CSS v4**, shadcn/ui, Lucide icons |
+| Deploy | **Vercel** (frontend) · Render (API) |
 
-Ready for the rest of the API: Socket.IO client, NextAuth (optional), Zustand.
+### State, data & realtime
+| Layer | Technology |
+| --- | --- |
+| Global store | **Redux Toolkit** (`configureStore`, slices) |
+| Server cache / API | **RTK Query** (`createApi`, optimistic updates) |
+| HTTP client | **Axios** (custom `axiosBaseQuery`) |
+| Realtime | **Socket.IO Client** (`socket.io-client`) |
+| Optional client state | **Zustand** |
+| Extra query tooling | **TanStack React Query** (available in deps) |
 
-The auth screens talk to [chatwave-backend](https://chatwave-backend-z7n1.onrender.com/) (`/api/auth/register`, `/login`, `/logout`, `/me`, `/forgot-password`, `/reset-password`, Google/GitHub).
+### Calls & media (WebRTC)
+| Layer | Technology |
+| --- | --- |
+| Live call media | **WebRTC** MediaStream APIs |
+| Camera / mic | `navigator.mediaDevices.getUserMedia` |
+| Screen share | `navigator.mediaDevices.getDisplayMedia` |
+| Voice note waveform | **wavesurfer.js** |
+
+### Auth, forms & UX
+| Layer | Technology |
+| --- | --- |
+| Auth | **NextAuth v5** + backend JWT session |
+| Forms | **React Hook Form** |
+| Validation | **Zod** + `@hookform/resolvers` |
+| Motion | **Framer Motion** |
+| Theming | **next-themes** (light / dark / system) |
+| Toasts | **Sonner** |
+| Dates | **date-fns** |
+| Class utilities | `clsx`, `tailwind-merge`, `class-variance-authority` |
+
+**Backend API:** [chatwave-backend-z7n1.onrender.com](https://chatwave-backend-z7n1.onrender.com/)
 
 ---
 
-## Routes
+## Demo
+
+| | |
+| --- | --- |
+| **Live** | [chatwave-pvj.vercel.app](https://chatwave-pvj.vercel.app/) |
+| **Sign in** | Create an account on the live site, or use your own local backend |
+
+> Tip for portfolio reviewers: open the live URL, sign up, start a chat, and try an audio call to see the ringing → connected control flow.
+
+---
+
+## App routes
 
 | Path | Screen |
 | --- | --- |
-| `/` | Redirects to sign in |
-| `/sign-in` `/sign-up` `/forgot-password` | Auth |
-| `/chats` `/chats/[id]` | Conversations and thread |
-| `/call` | Live audio or video (`?type=` `?peer=`) |
+| `/` | Landing / redirect into auth |
+| `/sign-in` · `/sign-up` · `/forgot-password` | Authentication |
+| `/chats` · `/chats/[id]` | Conversation list & thread |
+| `/call` | Live audio / video session |
 | `/calls` | Call history |
-| `/contacts` | People |
-| `/settings` | Account and app preferences |
+| `/contacts` | People & following |
+| `/settings` | Profile & preferences |
 | `/advanced` | Owner-only user admin |
-| `/privacy` `/terms` | Legal |
+| `/privacy` · `/terms` | Legal |
 
 ---
 
 ## Project structure
 
-```
-src/
-  app/                 # Routes only (page + layout)
-  features/            # One folder per product area
-    auth/
-    chats/
-    call/              # Live call
-    calls/             # Call history
-    contacts/
-    settings/
-    advanced/
-    legal/
-  components/
-    ui/                # shadcn primitives
-    layout/            # Rail, tab bar, shell
-    shared/            # Avatar, theme switch
-    motion/
-  providers/           # Theme and app state
-  lib/                 # Data, types, hooks, utils
-public/                # Brand and static assets
+```text
+chatwave-frontend/
+├── app/                 # Next.js App Router (pages + layouts)
+├── features/            # Product areas (auth, chats, call, contacts…)
+│   ├── auth/
+│   ├── chats/
+│   ├── call/            # Live call UI & media
+│   ├── calls/           # Call history
+│   ├── contacts/
+│   ├── realtime/        # Socket bridge & presence
+│   ├── settings/
+│   └── advanced/
+├── components/
+│   ├── ui/              # shadcn primitives
+│   ├── layout/          # Shell, rail, tab bar
+│   └── shared/          # Skeletons, avatar, theme
+├── lib/                 # API client, RTK store, hooks, types
+├── providers/           # Theme, store, app providers
+└── public/              # Brand & static assets
 ```
 
-Add a route in `src/app`. Put the screen and its pieces in `src/features`. Shared chrome stays in `src/components`.
-
-Imports use `@/` aliases, for example `@/features/chats/thread` and `@/components/ui/button`.
+**Convention:** keep route files thin; put screen logic in `features/`; share chrome in `components/`.
 
 ---
 
 ## Getting started
 
-**Requirements:** Node.js 20+ and [pnpm](https://pnpm.io) 11 (see `packageManager` in `package.json`). npm or yarn also work.
+### 1. Prerequisites
+
+- **Node.js 20+**
+- **pnpm 11** (see `packageManager` in `package.json`)
+
+### 2. Clone & install
 
 ```bash
 git clone https://github.com/parvejme24/chatwave-frontend.git
@@ -98,10 +171,12 @@ cd chatwave-frontend
 pnpm install
 ```
 
-Create `.env.local` in the project root (do not commit it):
+### 3. Environment
+
+Create `.env.local` in the project root (never commit this file):
 
 ```env
-AUTH_SECRET=
+AUTH_SECRET=your_auth_secret
 AUTH_URL=http://localhost:3000
 AUTH_TRUST_HOST=true
 
@@ -109,56 +184,74 @@ NEXT_PUBLIC_API_URL=https://chatwave-backend-z7n1.onrender.com
 NEXT_PUBLIC_SOCKET_URL=https://chatwave-backend-z7n1.onrender.com
 ```
 
-Optional, when you wire a real backend and OAuth:
+Optional (OAuth / email / uploads), when configured on the backend:
 
 ```env
 AUTH_GOOGLE_ID=
 AUTH_GOOGLE_SECRET=
 AUTH_GITHUB_ID=
 AUTH_GITHUB_SECRET=
-BACKEND_JWT_SECRET=
-MONGODB_URI=
-SMTP_HOST=
-SMTP_PORT=587
-SMTP_USER=
-SMTP_PASS=
-EMAIL_FROM=noreply@chatwave.app
 NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME=
 ```
 
-Start the app:
+### 4. Run locally
 
 ```bash
 pnpm dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). After a large folder move, stop and restart the dev server so Next picks up `src/app`.
+Open [http://localhost:3000](http://localhost:3000).
+
+### 5. Production build
+
+```bash
+pnpm build
+pnpm start
+```
 
 ---
 
 ## Scripts
 
-| Command | What it does |
+| Command | Description |
 | --- | --- |
-| `pnpm dev` | Development server |
-| `pnpm build` | Production build |
+| `pnpm dev` | Start development server |
+| `pnpm build` | Create production build |
 | `pnpm start` | Serve the production build |
-| `pnpm lint` | ESLint |
+| `pnpm lint` | Run ESLint |
 
 ---
 
-## Conventions
+## Architecture notes
 
-- Route files stay thin. Feature UI lives next to the feature.
-- Design tokens live in `src/app/globals.css` (paper, surface, ink, signal, pulse).
-- Motion uses `signalEase` and respects reduced motion.
-- Lucide icons use stroke `1.75`.
-- Prototype screens do not call a live API unless you add that yourself.
+- **Redux Toolkit + RTK Query** — REST caching, mutations, and optimistic updates for chats, contacts, calls, and settings.
+- **Axios** — typed HTTP layer under RTK Query (`axiosBaseQuery`).
+- **Socket.IO Client** — presence, incoming calls, and live thread / conversation sync.
+- **WebRTC media** — local `MediaStream` for mic, camera, and screen share in call hooks; controls stay disabled while **ringing** and unlock when **active**.
+- Design tokens (paper, surface, ink, signal, pulse) live in `app/globals.css`.
+
+---
+
+## Resume / portfolio highlights
+
+- End-to-end **realtime chat product** (not a static mock)
+- **Next.js 16 + TypeScript + React 19** with a clean feature-based architecture
+- **Redux Toolkit / RTK Query** for API state; **Axios** for HTTP
+- **Socket.IO Client** for presence, messages, and call signaling events
+- **WebRTC** media capture for audio/video calls and screen share
+- Auth, messaging, contacts, groups, and call history — deployed on **Vercel**
+
+---
+
+## Author
+
+**Md Parvej** · [parvejme24](https://github.com/parvejme24)
+
+- Live demo: [chatwave-pvj.vercel.app](https://chatwave-pvj.vercel.app/)
+- Frontend: [chatwave-frontend](https://github.com/parvejme24/chatwave-frontend)
 
 ---
 
 ## License
 
 Private project. See the repository for access.
-
-**Author:** [parvejme24](https://github.com/parvejme24)
