@@ -1,7 +1,7 @@
 "use client"
 
 import { motion, useReducedMotion } from "framer-motion"
-import { BellOff, ImageIcon, Mic, Video } from "lucide-react"
+import { BellOff, ImageIcon, Mic, UsersRound, Video } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 
@@ -34,6 +34,7 @@ export function ConversationRow({
   const PreviewIcon = conversation.previewIcon
     ? previewIcons[conversation.previewIcon]
     : null
+  const isGroup = Boolean(conversation.group)
 
   return (
     <div
@@ -47,7 +48,11 @@ export function ConversationRow({
     >
       <motion.button
         type="button"
-        aria-label={`Open ${conversation.name} profile`}
+        aria-label={
+          isGroup
+            ? `Open ${conversation.name} group details`
+            : `Open ${conversation.name} profile`
+        }
         onClick={() => {
           onOpen(conversation.id)
           openProfile(personFromConversation(conversation))
@@ -56,15 +61,28 @@ export function ConversationRow({
         whileHover={reduceMotion ? undefined : { scale: 1.06 }}
         whileTap={reduceMotion ? undefined : { scale: 0.94 }}
         transition={{ duration: 0.16, ease: signalEase }}
-        className="shrink-0 cursor-pointer rounded-full"
+        className="relative shrink-0 cursor-pointer"
       >
         <UserAvatar
           initials={conversation.initials}
           tone={conversation.tone}
           photo={conversation.photoUrl}
           presence={conversation.presence}
-          showPresence={!conversation.group}
+          showPresence={!isGroup}
+          className={
+            isGroup
+              ? "rounded-[13px] [&_img]:rounded-[13px]"
+              : "rounded-full"
+          }
         />
+        {isGroup ? (
+          <span
+            className="absolute -right-0.5 -bottom-0.5 grid size-[18px] place-items-center rounded-[6px] border-[2px] border-surface bg-ink text-paper shadow-sm"
+            aria-hidden
+          >
+            <UsersRound className="size-[10px] stroke-[2.25]" />
+          </span>
+        ) : null}
       </motion.button>
       <Link
         href={`/chats/${conversation.id}`}
@@ -72,13 +90,20 @@ export function ConversationRow({
         className="min-w-0 flex-1"
       >
         <span className="flex items-baseline justify-between gap-2.5">
-          <span
-            className={cn(
-              "truncate font-display text-[14.5px] tracking-[-0.01em] text-ink",
-              conversation.unread > 0 ? "font-bold" : "font-semibold"
-            )}
-          >
-            {conversation.name}
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span
+              className={cn(
+                "truncate font-display text-[14.5px] tracking-[-0.01em] text-ink",
+                conversation.unread > 0 ? "font-bold" : "font-semibold"
+              )}
+            >
+              {conversation.name}
+            </span>
+            {isGroup ? (
+              <span className="shrink-0 rounded-md bg-surface-3 px-1.5 py-px font-mono text-[10px] font-semibold tracking-[0.04em] text-ink-3 uppercase">
+                Group
+              </span>
+            ) : null}
           </span>
           <span className="shrink-0 font-mono text-[11px] text-ink-4">
             {conversation.time}

@@ -3,33 +3,28 @@
 import { motion, useReducedMotion } from "framer-motion"
 import { ChevronLeft, Info, Phone, Video } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { toast } from "sonner"
 
 import { IconBtn } from "../../components/layout/icon-btn"
 import { useChat } from "./chat-provider"
-import { useStartCall } from "../call/use-start-call"
 import { signalEase } from "../../components/motion/motion-item"
 import { UserAvatar } from "../../components/shared/user-avatar"
-import { mutationErrorMessage } from "../../lib/store/api-error"
+import { callPageHref } from "../../lib/call"
 import { personFromConversation, type Conversation } from "../../lib/types/chat"
 import { cn } from "../../lib/utils"
 
 export function ThreadHeader({ conversation }: { conversation: Conversation }) {
   const router = useRouter()
   const { openProfile } = useChat()
-  const { startCall, isStarting } = useStartCall()
   const reduceMotion = useReducedMotion()
 
-  async function call(type: "audio" | "video") {
-    try {
-      await startCall({
+  function call(type: "audio" | "video") {
+    router.push(
+      callPageHref({
         type,
         conversationId: conversation.id,
         peer: conversation.name,
       })
-    } catch (error) {
-      toast.error(mutationErrorMessage(error, "Could not start call"))
-    }
+    )
   }
 
   return (
@@ -85,19 +80,17 @@ export function ThreadHeader({ conversation }: { conversation: Conversation }) {
       <div className="flex gap-0.5">
         <button
           type="button"
-          disabled={isStarting}
           aria-label="Start voice call"
-          onClick={() => void call("audio")}
-          className="inline-flex size-10 items-center justify-center rounded-[11px] text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink disabled:cursor-not-allowed disabled:opacity-50 max-[479px]:size-[38px]"
+          onClick={() => call("audio")}
+          className="inline-flex size-10 cursor-pointer items-center justify-center rounded-[11px] text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink max-[479px]:size-[38px]"
         >
           <Phone className="size-5 stroke-[1.75]" aria-hidden />
         </button>
         <button
           type="button"
-          disabled={isStarting}
           aria-label="Start video call"
-          onClick={() => void call("video")}
-          className="inline-flex size-10 items-center justify-center rounded-[11px] text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink disabled:cursor-not-allowed disabled:opacity-50 max-[479px]:size-[38px]"
+          onClick={() => call("video")}
+          className="inline-flex size-10 cursor-pointer items-center justify-center rounded-[11px] text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink max-[479px]:size-[38px]"
         >
           <Video className="size-5 stroke-[1.75]" aria-hidden />
         </button>

@@ -134,6 +134,36 @@ export const conversationsApi = createApi({
         { type: "Conversation", id: arg.conversationId },
       ],
     }),
+    updateConversationPhoto: build.mutation<
+      Conversation,
+      { conversationId: string; file: File }
+    >({
+      query: ({ conversationId, file }) => {
+        const data = new FormData()
+        data.append("photo", file)
+        return {
+          url: `/api/conversations/${conversationId}/photo`,
+          method: "PATCH",
+          data,
+        }
+      },
+      transformResponse: (response: unknown) => unwrapConversation(response),
+      invalidatesTags: (_result, _error, arg) => [
+        { type: "Conversation", id: "LIST" },
+        { type: "Conversation", id: arg.conversationId },
+      ],
+    }),
+    deleteConversationPhoto: build.mutation<Conversation, string>({
+      query: (conversationId) => ({
+        url: `/api/conversations/${conversationId}/photo`,
+        method: "DELETE",
+      }),
+      transformResponse: (response: unknown) => unwrapConversation(response),
+      invalidatesTags: (_result, _error, id) => [
+        { type: "Conversation", id: "LIST" },
+        { type: "Conversation", id },
+      ],
+    }),
     updateMembership: build.mutation<Conversation, MembershipPatch>({
       query: ({ conversationId, ...body }) => ({
         url: `/api/conversations/${conversationId}/membership`,
@@ -152,6 +182,35 @@ export const conversationsApi = createApi({
         method: "POST",
       }),
       transformResponse: (response: unknown) => unwrapConversation(response),
+      async onQueryStarted(conversationId, { dispatch, queryFulfilled }) {
+        const patches = dispatch(
+          conversationsApi.util.updateQueryData(
+            "getConversations",
+            { filter: "all" },
+            (draft) => {
+              const row = draft.conversations.find(
+                (item) => item.id === conversationId
+              )
+              if (row) row.unread = 0
+            }
+          )
+        )
+        const detailPatch = dispatch(
+          conversationsApi.util.updateQueryData(
+            "getConversation",
+            conversationId,
+            (draft) => {
+              draft.unread = 0
+            }
+          )
+        )
+        try {
+          await queryFulfilled
+        } catch {
+          patches.undo()
+          detailPatch.undo()
+        }
+      },
       invalidatesTags: (_result, _error, id) => [
         { type: "Conversation", id: "LIST" },
         { type: "Conversation", id },
@@ -241,6 +300,8 @@ export const {
   useCreateDirectConversationMutation,
   useCreateGroupConversationMutation,
   useUpdateConversationMutation,
+  useUpdateConversationPhotoMutation,
+  useDeleteConversationPhotoMutation,
   useUpdateMembershipMutation,
   useMarkConversationReadMutation,
   useGetConversationMembersQuery,

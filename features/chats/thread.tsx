@@ -8,6 +8,10 @@ import { MessageList } from "./message-list"
 import { ThreadHeader } from "./thread-header"
 import { THREAD_SEARCH_INPUT_ID, ThreadTools } from "./thread-tools"
 import { useChat } from "./chat-provider"
+import {
+  MessageListSkeleton,
+  ThreadSkeleton,
+} from "../../components/shared/loading-skeletons"
 import { signalEase } from "../../components/motion/motion-item"
 import { useMediaQuery } from "../../lib/hooks/use-media-query"
 import {
@@ -30,7 +34,7 @@ export function Thread({ conversationId }: { conversationId: string }) {
     { skip: !conversationId }
   )
   const conversation = detail ?? fromList
-  const { data: page } = useGetMessagesQuery(
+  const { data: page, isFetching: messagesFetching } = useGetMessagesQuery(
     { conversationId },
     { skip: !conversationId }
   )
@@ -73,11 +77,7 @@ export function Thread({ conversationId }: { conversationId: string }) {
   }
 
   if (!conversation && isLoading) {
-    return (
-      <section className="flex h-full flex-1 items-center justify-center bg-paper text-ink-3">
-        Loading conversation…
-      </section>
-    )
+    return <ThreadSkeleton />
   }
 
   if (!conversation) {
@@ -88,6 +88,7 @@ export function Thread({ conversationId }: { conversationId: string }) {
     )
   }
 
+  const messagesLoading = messagesFetching && !page?.messages?.length
   const thread = {
     ...conversation,
     messages: withDaySeparators(
@@ -132,11 +133,17 @@ export function Thread({ conversationId }: { conversationId: string }) {
           setThreadState((current) => ({ ...current, query }))
         }
       />
-      <MessageList
-        conversation={thread}
-        view={threadView}
-        query={threadQuery}
-      />
+      {messagesLoading ? (
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <MessageListSkeleton />
+        </div>
+      ) : (
+        <MessageList
+          conversation={thread}
+          view={threadView}
+          query={threadQuery}
+        />
+      )}
       <Composer conversationId={conversation.id} />
     </motion.section>
   )

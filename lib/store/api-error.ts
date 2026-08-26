@@ -10,6 +10,12 @@ export function isApiQueryError(error: unknown): error is ApiQueryError {
 }
 
 export function mutationErrorMessage(error: unknown, fallback: string) {
+  const raw = rawMutationError(error)
+  if (!raw) return fallback
+  return friendlyApiMessage(raw) || raw
+}
+
+function rawMutationError(error: unknown): string {
   if (isApiQueryError(error) && error.message) return error.message
   if (error && typeof error === "object" && "data" in error) {
     const data = (error as { data?: unknown }).data
@@ -18,7 +24,21 @@ export function mutationErrorMessage(error: unknown, fallback: string) {
       if (typeof value === "string" && value) return value
     }
   }
-  return fallback
+  return ""
+}
+
+/** Map terse/API block errors to clearer product copy. */
+function friendlyApiMessage(raw: string) {
+  if (/cannot message this person|one of you has blocked/i.test(raw)) {
+    return "You can't send messages here. One of you blocked the other."
+  }
+  if (/cannot add this person/i.test(raw)) {
+    return "You can't add this person. One of you blocked the other."
+  }
+  if (/^blocked$/i.test(raw.trim()) || /\bis blocked?\b/i.test(raw)) {
+    return "You can't do that. One of you blocked the other."
+  }
+  return ""
 }
 
 export function isBadRequest(error: unknown) {
@@ -27,6 +47,11 @@ export function isBadRequest(error: unknown) {
 }
 
 export function isAlreadyInCallError(error: unknown) {
+  const status =
+    error && typeof error === "object" && "status" in error
+      ? Number((error as { status?: unknown }).status)
+      : 0
+  if (status === 409) return true
   return /already in a call/i.test(mutationErrorMessage(error, ""))
 }
 

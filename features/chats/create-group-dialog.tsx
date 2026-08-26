@@ -8,15 +8,16 @@ import { toast } from "sonner"
 
 import { chatActionError, useChat } from "./chat-provider"
 import { IconBtn } from "../../components/layout/icon-btn"
+import { PeoplePickerSkeleton } from "../../components/shared/loading-skeletons"
 import { signalEase } from "../../components/motion/motion-item"
 import { UserAvatar } from "../../components/shared/user-avatar"
 import { Input } from "../../components/ui/input"
 import { useDebouncedValue } from "../../lib/hooks/use-debounced-value"
 import { useMediaQuery } from "../../lib/hooks/use-media-query"
-import { useListUsersQuery } from "../../lib/store/users-api"
+import { useGetContactsQuery } from "../../lib/store/contacts-api"
 import { MIN_GROUP_MEMBERS, type GroupMember } from "../../lib/types/chat"
 import {
-  contactFromDirectoryUser,
+  contactFromDto,
   contactInitials,
   type Contact,
 } from "../../lib/types/contact"
@@ -47,8 +48,8 @@ export function CreateGroupDialog({
     }
   }
   const debounced = useDebouncedValue(query.trim(), 300)
-  const { data: list, isFetching } = useListUsersQuery(
-    debounced ? { q: debounced, limit: 200 } : { limit: 200 },
+  const { data: list, isFetching } = useGetContactsQuery(
+    debounced ? { q: debounced, limit: 500 } : { limit: 500 },
     { skip: !open }
   )
 
@@ -64,7 +65,7 @@ export function CreateGroupDialog({
   }, [open, onClose])
 
   const people = useMemo(
-    () => (list?.users ?? []).map(contactFromDirectoryUser),
+    () => (list?.contacts ?? []).map(contactFromDto),
     [list]
   )
   const ready = name.trim().length > 0 && selected.length >= MIN_GROUP_MEMBERS
@@ -233,9 +234,7 @@ export function CreateGroupDialog({
 
             <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
               {isFetching && people.length === 0 ? (
-                <p className="px-3 py-10 text-center text-sm text-ink-3">
-                  Searching…
-                </p>
+                <PeoplePickerSkeleton className="px-2" />
               ) : people.length === 0 ? (
                 <p className="px-3 py-10 text-center text-sm text-ink-3">
                   {query.trim()

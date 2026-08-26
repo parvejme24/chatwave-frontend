@@ -190,6 +190,30 @@ export function MessageList({
             )
           }
 
+          if (item.type === "system") {
+            return (
+              <motion.div
+                key={item.id}
+                initial={reduceMotion ? false : { opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={reduceMotion ? undefined : { opacity: 0 }}
+                transition={{ duration: 0.2, ease: signalEase }}
+                className="my-2 flex w-full justify-center px-8 max-[859px]:px-5"
+              >
+                <div className="w-full max-w-[260px] text-center max-[479px]:max-w-[220px]">
+                  <p className="text-[11px] leading-[1.35] text-ink-4 [overflow-wrap:anywhere]">
+                    {item.text}
+                  </p>
+                  {item.time ? (
+                    <span className="mt-0.5 block font-mono text-[9.5px] tracking-[0.02em] text-ink-4/65">
+                      {item.time}
+                    </span>
+                  ) : null}
+                </div>
+              </motion.div>
+            )
+          }
+
           const outgoing = isOutgoingMessage(item, me.id)
           const gap = prevDir !== null && prevDir !== item.dir
           const showSenderName = !outgoing && Boolean(conversation.group)

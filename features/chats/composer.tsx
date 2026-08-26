@@ -215,7 +215,7 @@ export function Composer({ conversationId }: { conversationId: string }) {
             ref={fileRef}
             type="file"
             multiple
-            className="sr-only"
+            className="hidden"
             aria-hidden
             tabIndex={-1}
             onChange={(event) => void attachFiles(event.target.files)}

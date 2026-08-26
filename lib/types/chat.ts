@@ -56,7 +56,7 @@ export type ChatMessage = {
   conversationId?: string
   senderId?: string
   dir: "in" | "out"
-  type: "text" | "image" | "file" | "voice" | "video_note" | "video"
+  type: "text" | "image" | "file" | "voice" | "video_note" | "video" | "system"
   time: string
   status?: MessageStatus
   text?: string
@@ -695,7 +695,8 @@ export function asMessageType(value: unknown): ChatMessage["type"] {
     value === "file" ||
     value === "voice" ||
     value === "video_note" ||
-    value === "video"
+    value === "video" ||
+    value === "system"
   ) {
     return value
   }

@@ -1,7 +1,7 @@
 "use client"
 
 import { motion, useReducedMotion } from "framer-motion"
-import { PenLine, Search, Users } from "lucide-react"
+import { Contact, Search, UsersRound } from "lucide-react"
 import { usePathname, useRouter } from "next/navigation"
 import { useEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent } from "react"
 
@@ -16,10 +16,16 @@ import { MotionItem, signalEase } from "../../components/motion/motion-item"
 import { Input } from "../../components/ui/input"
 import { ScrollArea } from "../../components/ui/scroll-area"
 import { selectAccessToken } from "../../lib/store/auth-slice"
+import { useGetCallsQuery } from "../../lib/store/calls-api"
 import { useGetConversationsQuery } from "../../lib/store/conversations-api"
 import { useAppSelector } from "../../lib/store/hooks"
 import type { ConversationFilter, FilterChip } from "../../lib/types/chat"
 import { cn } from "../../lib/utils"
+import { CallRow } from "../calls/call-row"
+import {
+  CallListSkeleton,
+  ConversationListSkeleton,
+} from "../../components/shared/loading-skeletons"
 
 const chips: { id: FilterChip; label: string }[] = [
   { id: "all", label: "All" },
@@ -66,6 +72,20 @@ export function ConversationList() {
     { filter: listFilter(chip), q: debounced || undefined },
     { skip: skipFiltered }
   )
+  const { data: callsData, isFetching: callsFetching } = useGetCallsQuery(
+    { filter: "all" },
+    { skip: !token || chip !== "calls" }
+  )
+  const callRows = useMemo(() => {
+    const rows = callsData?.calls ?? []
+    const q = debounced.toLowerCase()
+    if (!q) return rows
+    return rows.filter(
+      (call) =>
+        call.name.toLowerCase().includes(q) ||
+        call.subtitle.toLowerCase().includes(q)
+    )
+  }, [callsData?.calls, debounced])
 
   const routeId = pathname.startsWith("/chats/")
     ? pathname.split("/")[2]
@@ -83,6 +103,11 @@ export function ConversationList() {
   const pinned = searching ? [] : shown.filter((item) => item.pinned)
   const rest = searching ? shown : shown.filter((item) => !item.pinned)
   const emptyLabel = searching ? query.trim() : chips.find((item) => item.id === chip)?.label
+  const listLoading =
+    chip === "calls"
+      ? callsFetching && callRows.length === 0
+      : conversationsLoading || (filtered && isFetching && !shown.length)
+  const listEmpty = chip === "calls" ? callRows.length === 0 : shown.length === 0
 
   useEffect(() => {
     const scroller = chipScroller.current
@@ -194,16 +219,16 @@ export function ConversationList() {
           </h1>
           <div className="flex gap-0.5">
             <IconBtn
-              aria-label="New group"
-              onClick={() => setGroupOpen(true)}
-            >
-              <Users className="size-5 stroke-[1.75]" aria-hidden />
-            </IconBtn>
-            <IconBtn
-              aria-label="New chat"
+              aria-label="Contacts"
               onClick={() => router.push("/contacts")}
             >
-              <PenLine className="size-5 stroke-[1.75]" aria-hidden />
+              <Contact className="size-5 stroke-[1.75]" aria-hidden />
+            </IconBtn>
+            <IconBtn
+              aria-label="Create group"
+              onClick={() => setGroupOpen(true)}
+            >
+              <UsersRound className="size-5 stroke-[1.75]" aria-hidden />
             </IconBtn>
           </div>
         </div>
@@ -278,24 +303,41 @@ export function ConversationList() {
 
       <ScrollArea className="h-full min-h-0 flex-1">
         <div className="px-2.5 pb-4 max-[479px]:px-2" role="list">
-          {conversationsLoading || (filtered && isFetching && !shown.length) ? (
-            <p className="px-3 py-12 text-center text-sm text-ink-3">
-              Loading conversations…
-            </p>
-          ) : !shown.length ? (
+          {listLoading ? (
+            chip === "calls" ? (
+              <CallListSkeleton />
+            ) : (
+              <ConversationListSkeleton />
+            )
+          ) : listEmpty ? (
             <MotionItem className="flex flex-col items-center px-5 py-12 text-center">
               <div className="mb-2.5 grid size-[68px] place-items-center rounded-[20px] border border-edge bg-surface text-ink-4 shadow-[0_1px_2px_rgba(17,24,33,0.06),0_2px_8px_rgba(17,24,33,0.04)]">
                 <Search className="size-7 stroke-[1.75]" aria-hidden />
               </div>
               <h3 className="font-display text-[19px] font-bold tracking-[-0.02em] text-ink">
-                {chip === "calls" ? "No calls yet" : "No matches"}
+                {chip === "calls"
+                  ? "No calls yet"
+                  : chip === "archived"
+                    ? "No archived chats"
+                    : "No matches"}
               </h3>
               <p className="mt-1 max-w-[320px] text-sm text-ink-3">
                 {chip === "calls"
-                  ? "Call history will show here once Calls are wired."
-                  : `Nothing here for ${emptyLabel}.`}
+                  ? "Voice and video calls from chats will appear here."
+                  : chip === "archived"
+                    ? "Archived chats appear here when you use Archive conversation."
+                    : `Nothing here for ${emptyLabel}.`}
               </p>
             </MotionItem>
+          ) : chip === "calls" ? (
+            callRows.map((call, index) => (
+              <MotionItem key={call.id} delay={Math.min(index * 0.03, 0.18)}>
+                <CallRow
+                  call={call}
+                  className="rounded-[14px] border-t-0 px-2.5 py-[11px] hover:bg-surface-2"
+                />
+              </MotionItem>
+            ))
           ) : (
             <>
               {pinned.length > 0 ? (

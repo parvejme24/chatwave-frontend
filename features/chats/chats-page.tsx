@@ -2,6 +2,7 @@
 
 import { Thread } from "./thread"
 import { useChat } from "./chat-provider"
+import { ThreadSkeleton } from "../../components/shared/loading-skeletons"
 
 export function ChatsPage() {
   const { conversations, conversationsLoading } = useChat()
@@ -9,8 +10,8 @@ export function ChatsPage() {
 
   if (conversationsLoading) {
     return (
-      <div className="hidden h-full items-center justify-center bg-paper text-sm text-ink-3 min-[860px]:flex min-[860px]:flex-1">
-        Loading conversations…
+      <div className="hidden h-full min-[860px]:flex min-[860px]:flex-1">
+        <ThreadSkeleton />
       </div>
     )
   }

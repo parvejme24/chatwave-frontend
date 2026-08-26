@@ -6,9 +6,8 @@ import {
   Ban,
   Bell,
   CheckCheck,
-  FileText,
-  ImageIcon,
   LogOut,
+  MessageCircle,
   Phone,
   Pin,
   Search,
@@ -21,18 +20,29 @@ import {
   X,
 } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { toast } from "sonner"
 
 import { IconBtn } from "../../components/layout/icon-btn"
 import { chatActionError, useChat } from "./chat-provider"
-import { useStartCall } from "../call/use-start-call"
+import { SharedMediaSection } from "./shared-media-section"
+import { GroupInfoEditor } from "./group-info-editor"
 import { signalEase } from "../../components/motion/motion-item"
 import { UserAvatar } from "../../components/shared/user-avatar"
+import { Button } from "../../components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../../components/ui/dialog"
 import { Switch } from "../../components/ui/switch"
+import { callPageHref } from "../../lib/call"
 import { useMediaQuery } from "../../lib/hooks/use-media-query"
 import type { Conversation, GroupMember, ProfilePerson } from "../../lib/types/chat"
-import { isGroupAdmin } from "../../lib/types/chat"
+import { isGroupAdmin, personFromConversation } from "../../lib/types/chat"
 import { useBlockUserMutation } from "../../lib/store/blocks-api"
 import {
   useGetConversationMembersQuery,
@@ -43,15 +53,6 @@ import {
   useGetUserByUsernameQuery,
 } from "../../lib/store/users-api"
 import { isMongoUserId, presenceNote } from "../../lib/users"
-
-const mediaTiles = [
-  ImageIcon,
-  ImageIcon,
-  Video,
-  ImageIcon,
-  ImageIcon,
-  FileText,
-] as const
 
 const actionClass =
   "flex w-[66px] cursor-pointer flex-col items-center gap-[5px] rounded-[14px] bg-surface-2 py-2.5 text-[11.5px] font-medium text-ink-2 transition-transform hover:scale-[1.04] hover:bg-surface-3"
@@ -121,19 +122,49 @@ export function DetailsDrawer({ conversationId }: { conversationId: string }) {
   const isNarrow = useMediaQuery("(max-width: 1280px)")
   const reduceMotion = useReducedMotion()
   const show = Boolean(drawerOpen && person && conversation)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
-    if (!drawerOpen) return
+    if (!drawerOpen) {
+      setDeleteOpen(false)
+      setDeleting(false)
+      return
+    }
 
     function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") setDrawerOpen(false)
+      if (event.key === "Escape" && !deleteOpen) setDrawerOpen(false)
     }
 
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [drawerOpen, setDrawerOpen])
+  }, [deleteOpen, drawerOpen, setDrawerOpen])
 
   if (!conversation) return null
+
+  const forEveryone = !conversation.group
+  const peerName = person?.name?.split(" ")[0] || person?.name || "them"
+  const conversationIdToDelete = conversation.id
+
+  async function confirmDelete() {
+    setDeleting(true)
+    try {
+      if (!(await deleteConversation(conversationIdToDelete))) {
+        toast.error("Could not delete this conversation")
+        return
+      }
+      setDeleteOpen(false)
+      setDrawerOpen(false)
+      toast(
+        forEveryone
+          ? "Conversation deleted for both of you"
+          : "Conversation deleted"
+      )
+      router.push("/chats")
+    } finally {
+      setDeleting(false)
+    }
+  }
 
   const transition = { duration: reduceMotion ? 0.01 : 0.32, ease: signalEase }
   const body =
@@ -196,14 +227,16 @@ export function DetailsDrawer({ conversationId }: { conversationId: string }) {
             toast.error(chatActionError(error, "Could not update archive"))
           }
         }}
-        onDelete={async () => {
-          if (!(await deleteConversation(conversation.id))) {
-            toast.error("Could not delete this conversation")
-            return
-          }
-          toast("Conversation deleted")
-          router.push("/chats")
-        }}
+        onDelete={() => setDeleteOpen(true)}
+        onEditGroup={
+          conversation.group ? (
+            <GroupInfoEditor
+              conversation={conversation}
+              asManageRow
+              onSaved={(latest) => openProfile(personFromConversation(latest))}
+            />
+          ) : null
+        }
         onBlock={async () => {
           const userId =
             person.userId ??
@@ -214,10 +247,19 @@ export function DetailsDrawer({ conversationId }: { conversationId: string }) {
           }
           try {
             await blockUser({ userId }).unwrap()
-            toast(`${person.name.split(" ")[0]} is blocked`)
+            try {
+              await setArchived(conversation.id, true)
+            } catch {
+              /* archive is best-effort; backend also archives on block */
+            }
+            const first = person.name.split(" ")[0] || person.name
+            toast(
+              `You blocked ${first}. They can't message or call you. This chat is in Archived.`
+            )
             setDrawerOpen(false)
+            router.push("/chats")
           } catch (error) {
-            toast.error(chatActionError(error, "Could not block contact"))
+            toast.error(chatActionError(error, "Could not block this person"))
           }
         }}
         reduceMotion={Boolean(reduceMotion)}
@@ -225,69 +267,129 @@ export function DetailsDrawer({ conversationId }: { conversationId: string }) {
     ) : null
 
   return (
-    <AnimatePresence>
-      {show ? (
-        isMobile ? (
-          <motion.div
-            key="details-mobile"
-            className="fixed inset-0 z-[55] bg-surface"
-            initial={reduceMotion ? false : { x: "100%" }}
-            animate={{ x: 0 }}
-            exit={reduceMotion ? { opacity: 0 } : { x: "100%" }}
-            transition={transition}
-          >
-            <aside
-              aria-label="Conversation details"
-              className="h-full overflow-y-auto bg-surface"
-            >
-              {body}
-            </aside>
-          </motion.div>
-        ) : isOverlay ? (
-          <motion.div
-            key="details-overlay"
-            className="absolute inset-0 z-40"
-            initial={reduceMotion ? false : { opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: reduceMotion ? 0.01 : 0.22, ease: signalEase }}
-          >
-            <button
-              type="button"
-              aria-label="Close details"
-              className="absolute inset-0 cursor-pointer bg-[rgba(17,24,33,0.28)]"
-              onClick={() => setDrawerOpen(false)}
-            />
-            <motion.aside
-              aria-label="Conversation details"
-              className="absolute inset-y-0 right-0 w-80 overflow-y-auto bg-surface shadow-[0_24px_64px_rgba(17,24,33,0.18)] max-[1280px]:w-72"
+    <>
+      <AnimatePresence>
+        {show ? (
+          isMobile ? (
+            <motion.div
+              key="details-mobile"
+              className="fixed inset-0 z-[55] bg-surface"
               initial={reduceMotion ? false : { x: "100%" }}
               animate={{ x: 0 }}
-              exit={reduceMotion ? undefined : { x: "100%" }}
+              exit={reduceMotion ? { opacity: 0 } : { x: "100%" }}
               transition={transition}
             >
-              {body}
+              <aside
+                aria-label="Conversation details"
+                className="h-full overflow-y-auto bg-surface"
+              >
+                {body}
+              </aside>
+            </motion.div>
+          ) : isOverlay ? (
+            <motion.div
+              key="details-overlay"
+              className="absolute inset-0 z-40"
+              initial={reduceMotion ? false : { opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: reduceMotion ? 0.01 : 0.22, ease: signalEase }}
+            >
+              <button
+                type="button"
+                aria-label="Close details"
+                className="absolute inset-0 cursor-pointer bg-[rgba(17,24,33,0.28)]"
+                onClick={() => setDrawerOpen(false)}
+              />
+              <motion.aside
+                aria-label="Conversation details"
+                className="absolute inset-y-0 right-0 w-80 overflow-y-auto bg-surface shadow-[0_24px_64px_rgba(17,24,33,0.18)] max-[1280px]:w-72"
+                initial={reduceMotion ? false : { x: "100%" }}
+                animate={{ x: 0 }}
+                exit={reduceMotion ? undefined : { x: "100%" }}
+                transition={transition}
+              >
+                {body}
+              </motion.aside>
+            </motion.div>
+          ) : (
+            <motion.aside
+              key="details-inline"
+              aria-label="Conversation details"
+              initial={reduceMotion ? false : { width: 0, opacity: 0 }}
+              animate={{ width: isNarrow ? 288 : 320, opacity: 1 }}
+              exit={
+                reduceMotion ? { opacity: 0 } : { width: 0, opacity: 0 }
+              }
+              transition={transition}
+              className="h-full shrink-0 overflow-hidden border-l border-edge bg-surface"
+            >
+              <div className="h-full w-80 overflow-y-auto max-[1280px]:w-72">
+                {body}
+              </div>
             </motion.aside>
-          </motion.div>
-        ) : (
-          <motion.aside
-            key="details-inline"
-            aria-label="Conversation details"
-            initial={reduceMotion ? false : { width: 0, opacity: 0 }}
-            animate={{ width: isNarrow ? 288 : 320, opacity: 1 }}
-            exit={
-              reduceMotion ? { opacity: 0 } : { width: 0, opacity: 0 }
-            }
-            transition={transition}
-            className="h-full shrink-0 overflow-hidden border-l border-edge bg-surface"
-          >
-            <div className="h-full w-80 overflow-y-auto max-[1280px]:w-72">
-              {body}
+          )
+        ) : null}
+      </AnimatePresence>
+
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent
+          showCloseButton={false}
+          overlayClassName="z-[70]"
+          className="z-[70] max-w-[400px] overflow-hidden border-0 bg-surface p-0 shadow-[0_24px_64px_rgba(17,24,33,0.22)] ring-1 ring-edge sm:max-w-[400px]"
+        >
+          <div className="relative overflow-hidden px-6 pt-7 pb-5">
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-[radial-gradient(ellipse_at_top,color-mix(in_oklch,var(--pulse)_22%,transparent),transparent_70%)]"
+            />
+            <div className="relative mx-auto mb-4 grid size-14 place-items-center rounded-full bg-pulse/12 text-pulse ring-1 ring-pulse/20">
+              <Trash2 className="size-6 stroke-[1.75]" aria-hidden />
             </div>
-          </motion.aside>
-        )
-      ) : null}
-    </AnimatePresence>
+            <DialogHeader className="relative items-center gap-2 text-center">
+              <DialogTitle className="font-display text-[18px] font-bold tracking-tight text-ink">
+                Delete conversation?
+              </DialogTitle>
+              <DialogDescription className="text-[13.5px] leading-relaxed text-ink-3">
+                {forEveryone ? (
+                  <>
+                    This permanently deletes the chat with{" "}
+                    <span className="font-semibold text-ink">{peerName}</span> for
+                    both of you. All messages are removed and cannot be recovered.
+                    To keep the chat, use Archive instead.
+                  </>
+                ) : (
+                  <>
+                    This removes the conversation from your list only. Other members
+                    keep their copy. To hide it without deleting, use Archive.
+                  </>
+                )}
+              </DialogDescription>
+            </DialogHeader>
+          </div>
+          <DialogFooter className="m-0 gap-2 border-t border-edge bg-surface-2/60 p-4 sm:justify-stretch">
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={deleting}
+              onClick={() => setDeleteOpen(false)}
+              className="h-10 flex-1 rounded-[14px] border border-edge bg-surface px-3 text-[13.5px] font-semibold text-ink hover:bg-surface-3"
+            >
+              Keep chat
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={deleting}
+              onClick={() => void confirmDelete()}
+              className="h-10 flex-1 rounded-[14px] bg-pulse px-3 text-[13.5px] font-semibold text-white hover:bg-pulse/90 hover:text-white focus-visible:border-pulse/40 focus-visible:ring-pulse/25"
+            >
+              {deleting ? "Deleting…" : "Delete conversation"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }
 
@@ -312,6 +414,7 @@ function DrawerBody({
   onArchive,
   onBlock,
   onDelete,
+  onEditGroup,
   reduceMotion,
 }: {
   conversation: Conversation
@@ -327,30 +430,31 @@ function DrawerBody({
   onArchive: () => void
   onBlock: () => void
   onDelete: () => void
+  onEditGroup?: React.ReactNode
   reduceMotion: boolean
 }) {
-  const { startCall, isStarting } = useStartCall()
+  const router = useRouter()
   const showConversationTools = !person.isMe && person.name === conversation.name
   const canManageGroup = isGroupAdmin(conversation)
 
-  async function call(type: "audio" | "video") {
-    try {
-      const memberCall =
-        Boolean(person.userId) &&
-        !person.group &&
-        person.name !== conversation.name
-      await startCall(
-        memberCall
-          ? { type, userId: person.userId, peer: person.name }
-          : {
-              type,
-              conversationId: conversation.id,
-              peer: conversation.name,
-            }
-      )
-    } catch (error) {
-      toast.error(chatActionError(error, "Could not start call"))
-    }
+  function call(type: "audio" | "video") {
+    const memberCall =
+      Boolean(person.userId) &&
+      !person.group &&
+      person.name !== conversation.name
+    router.push(
+      memberCall
+        ? callPageHref({
+            type,
+            userId: person.userId,
+            peer: person.name,
+          })
+        : callPageHref({
+            type,
+            conversationId: conversation.id,
+            peer: conversation.name,
+          })
+    )
   }
   const adminCount =
     conversation.members?.filter((member) => member.role === "admin").length ?? 0
@@ -403,8 +507,21 @@ function DrawerBody({
               <>
                 <button
                   type="button"
-                  disabled={isStarting}
-                  onClick={() => void call("audio")}
+                  onClick={() => {
+                    router.push(`/chats/${conversation.id}`)
+                    onClose()
+                  }}
+                  className={actionClass}
+                >
+                  <MessageCircle
+                    className="size-[19px] stroke-[1.75] text-signal"
+                    aria-hidden
+                  />
+                  Message
+                </button>
+                <button
+                  type="button"
+                  onClick={() => call("audio")}
                   className={actionClass}
                 >
                   <Phone
@@ -415,8 +532,7 @@ function DrawerBody({
                 </button>
                 <button
                   type="button"
-                  disabled={isStarting}
-                  onClick={() => void call("video")}
+                  onClick={() => call("video")}
                   className={actionClass}
                 >
                   <Video
@@ -547,25 +663,10 @@ function DrawerBody({
           </div>
         ) : null}
 
+        <SharedMediaSection conversationId={conversation.id} />
+
         {showConversationTools ? (
           <>
-            <div className="border-b border-edge px-[22px] py-[18px]">
-              <h4 className="mb-3 text-[11px] font-bold tracking-[0.1em] text-ink-4 uppercase">
-                Shared media · 24
-              </h4>
-              <div className="grid grid-cols-3 gap-[5px]">
-                {mediaTiles.map((Icon, index) => (
-                  <button
-                    key={index}
-                    type="button"
-                    className="grid aspect-square cursor-pointer place-items-center rounded-[9px] bg-linear-to-br from-[#C8D4E4] to-[#A8BBD1] text-white/85 transition-transform hover:scale-95 dark:from-[#2B3648] dark:to-[#1E2733]"
-                  >
-                    <Icon className="size-5 stroke-[1.75]" aria-hidden />
-                  </button>
-                ))}
-              </div>
-            </div>
-
             <div className="border-b border-edge px-[22px] py-[18px]">
               <h4 className="mb-3 text-[11px] font-bold tracking-[0.1em] text-ink-4 uppercase">
                 Preferences
@@ -614,6 +715,7 @@ function DrawerBody({
               <h4 className="mb-3 text-[11px] font-bold tracking-[0.1em] text-ink-4 uppercase">
                 Manage
               </h4>
+              {onEditGroup}
               <button
                 type="button"
                 onClick={onArchive}
