@@ -23,9 +23,10 @@ export function endCallKeepalive(id: string) {
     "Content-Type": "application/json",
   }
   if (token) headers.Authorization = `Bearer ${token}`
+  // Do not send ice: "unknown" — EndCallDto only allows p2p | turn.
   void fetch(`${API_PROXY_PREFIX}/api/calls/${id}/end`, {
     method: "POST",
-    body: JSON.stringify({ ice: "unknown" }),
+    body: JSON.stringify({}),
     headers,
     keepalive: true,
     credentials: "include",

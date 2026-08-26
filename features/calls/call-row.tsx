@@ -11,11 +11,22 @@ const directionClass = {
   missed: "text-pulse",
 } as const
 
-export function CallRow({ call }: { call: CallRecord }) {
+export function CallRow({
+  call,
+  className,
+}: {
+  call: CallRecord
+  className?: string
+}) {
   const DirectionIcon = call.direction === "out" ? PhoneOutgoing : PhoneIncoming
 
   return (
-    <div className="flex items-center gap-3.5 border-t border-edge py-[13px] first:border-t-0">
+    <div
+      className={cn(
+        "flex items-center gap-3.5 border-t border-edge py-[13px] first:border-t-0",
+        className
+      )}
+    >
       <UserAvatar
         initials={call.initials}
         tone={call.tone}

@@ -25,7 +25,7 @@ export function CallSessionGuard() {
     if (!leftover) return
     void (async () => {
       try {
-        await endCall({ id: leftover, ice: "unknown" }).unwrap()
+        await endCall({ id: leftover }).unwrap()
       } catch {
         try {
           await declineCall(leftover).unwrap()
@@ -56,7 +56,7 @@ export function CallSessionGuard() {
     if (!id) return
     void (async () => {
       try {
-        await endCall({ id, ice: "unknown" }).unwrap()
+        await endCall({ id }).unwrap()
       } catch {
         try {
           await declineCall(id).unwrap()

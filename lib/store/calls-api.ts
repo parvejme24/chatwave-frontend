@@ -95,6 +95,14 @@ export function closeCallInCache(
   callId: string,
   status: CallStatus = "ended"
 ) {
+  // Patch the live call screen immediately so the peer leaves without waiting
+  // for a poll / refetch after call:ended.
+  dispatch(
+    callsApi.util.updateQueryData("getCall", callId, (draft) => {
+      draft.status = status as LiveCall["status"]
+    })
+  )
+
   const queries = (
     getState() as {
       callsApi?: {
@@ -240,7 +248,8 @@ export const callsApi = createApi({
       query: ({ id, ice }) => ({
         url: `/api/calls/${id}/end`,
         method: "POST",
-        data: ice ? { ice } : undefined,
+        // Backend EndCallDto only allows ice: p2p | turn (optional).
+        data: ice === "p2p" || ice === "turn" ? { ice } : {},
       }),
       transformResponse: (response: unknown) => unwrapCall(response),
       invalidatesTags: (_result, _error, arg) => [

@@ -27,6 +27,8 @@ type CallDockProps = {
   speakerOn: boolean
   sharing: boolean
   visible: boolean
+  /** Media controls stay off until the remote party answers. */
+  controlsEnabled?: boolean
   onMutedChange: (value: boolean) => void
   onCameraOffChange: (value: boolean) => void
   onSpeakerOnChange: (value: boolean) => void
@@ -41,6 +43,7 @@ export function CallDock({
   speakerOn,
   sharing,
   visible,
+  controlsEnabled = true,
   onMutedChange,
   onCameraOffChange,
   onSpeakerOnChange,
@@ -58,6 +61,7 @@ export function CallDock({
         <DockButton
           label={muted ? "Unmute" : "Mute"}
           off={muted}
+          disabled={!controlsEnabled}
           onClick={() => {
             onMutedChange(!muted)
             toast(muted ? "Microphone on" : "Microphone muted")
@@ -72,8 +76,9 @@ export function CallDock({
 
         {kind === "video" ? (
           <DockButton
-            label={cameraOff ? "Camera off" : "Camera"}
+            label={cameraOff ? "Turn camera on" : "Turn camera off"}
             off={cameraOff}
+            disabled={!controlsEnabled}
             onClick={() => {
               onCameraOffChange(!cameraOff)
               toast(cameraOff ? "Camera on" : "Camera off")
@@ -90,6 +95,7 @@ export function CallDock({
         <DockButton
           label={speakerOn ? "Speaker" : "Earpiece"}
           off={!speakerOn}
+          disabled={!controlsEnabled}
           onClick={() => {
             onSpeakerOnChange(!speakerOn)
             toast(speakerOn ? "Switched to earpiece" : "Speaker on")
@@ -102,16 +108,23 @@ export function CallDock({
           )}
         </DockButton>
 
-        <DockButton
-          label={sharing ? "Stop share" : "Share"}
-          off={!sharing}
-          onClick={() => {
-            onSharingChange(!sharing)
-            toast(sharing ? "Stopped sharing" : "Sharing your screen")
-          }}
-        >
-          <MonitorUp className="size-6 stroke-[1.75]" aria-hidden />
-        </DockButton>
+        {kind === "video" ? (
+          <DockButton
+            label={sharing ? "Stop share" : "Share screen"}
+            off={!sharing}
+            disabled={!controlsEnabled}
+            onClick={(event) => {
+              // Keep this click from landing on End after the label/layout updates.
+              event.preventDefault()
+              event.stopPropagation()
+              onSharingChange(!sharing)
+            }}
+          >
+            <MonitorUp className="size-6 stroke-[1.75]" aria-hidden />
+          </DockButton>
+        ) : null}
+
+        <span className="mx-1 hidden h-10 w-px bg-white/15 sm:block" aria-hidden />
 
         <DockButton label="End" end onClick={onEnd}>
           <PhoneOff className="size-6 stroke-[1.75]" aria-hidden />
@@ -125,41 +138,58 @@ function DockButton({
   label,
   off,
   end,
+  disabled,
   onClick,
   children,
 }: {
   label: string
   off?: boolean
   end?: boolean
-  onClick: () => void
+  disabled?: boolean
+  onClick: (event: React.MouseEvent<HTMLButtonElement>) => void
   children: React.ReactNode
 }) {
   return (
     <Tooltip>
       <TooltipTrigger
-        type="button"
-        aria-label={label}
-        aria-pressed={end ? undefined : !off}
-        onClick={onClick}
-        className="flex cursor-pointer flex-col items-center gap-1.5 text-[11px] text-white/70 max-[859px]:[&_.dock-label]:hidden"
+        render={
+          <button
+            type="button"
+            aria-label={label}
+            aria-pressed={end ? undefined : !off}
+            disabled={disabled}
+            onClick={onClick}
+            className={cn(
+              "flex w-[72px] flex-col items-center gap-1.5 text-[11px] text-white/70 max-[859px]:w-[58px] max-[859px]:[&_.dock-label]:hidden",
+              disabled ? "cursor-not-allowed opacity-40" : "cursor-pointer"
+            )}
+          />
+        }
       >
         <span
           className={cn(
-            "grid place-items-center rounded-full transition-[background-color,color,transform] duration-200 ease-[cubic-bezier(0.22,0.61,0.36,1)]",
+            "grid place-items-center rounded-full transition-[background-color,color,transform,opacity] duration-200 ease-[cubic-bezier(0.22,0.61,0.36,1)]",
             end
               ? "size-[66px] bg-pulse text-white hover:-translate-y-0.5 hover:brightness-110 max-[859px]:size-[60px]"
               : "size-14 max-[859px]:size-[52px]",
             !end &&
               (off
-                ? "bg-white text-[#0A0D13] hover:-translate-y-0.5"
-                : "bg-white/11 text-white backdrop-blur-md hover:-translate-y-0.5 hover:bg-white/20")
+                ? "bg-white text-[#0A0D13]"
+                : "bg-white/11 text-white backdrop-blur-md"),
+            !end &&
+              !disabled &&
+              (off
+                ? "hover:-translate-y-0.5"
+                : "hover:-translate-y-0.5 hover:bg-white/20")
           )}
         >
           {children}
         </span>
-        <span className="dock-label">{label}</span>
+        <span className="dock-label truncate">{label}</span>
       </TooltipTrigger>
-      <TooltipContent side="top">{label}</TooltipContent>
+      <TooltipContent side="top">
+        {disabled && !end ? "Available when the call connects" : label}
+      </TooltipContent>
     </Tooltip>
   )
 }

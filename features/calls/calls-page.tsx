@@ -5,6 +5,7 @@ import { useMemo, useState } from "react"
 import { CallFilters } from "./call-filters"
 import { CallSection } from "./call-section"
 import { QualityCard } from "./quality-card"
+import { CallListSkeleton } from "../../components/shared/loading-skeletons"
 import { selectAccessToken } from "../../lib/store/auth-slice"
 import {
   useGetCallQualityQuery,
@@ -61,7 +62,9 @@ export function CallsPage() {
         <CallFilters value={filter} onChange={setFilter} />
 
         {isFetching && calls.length === 0 ? (
-          <p className="py-10 text-[14.5px] text-ink-3">Loading calls…</p>
+          <div className="mt-2">
+            <CallListSkeleton count={7} />
+          </div>
         ) : isError ? (
           <p className="py-10 text-[14.5px] text-ink-3">
             Could not load calls. Try again in a moment.

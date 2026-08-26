@@ -8,16 +8,27 @@ export function CallStage({
   peer,
   initials,
   localStream,
+  screenStream,
+  sharing,
   status = "active",
 }: {
   kind: "audio" | "video"
   peer: string
   initials: string
   localStream: MediaStream | null
+  screenStream?: MediaStream | null
+  sharing?: boolean
   status?: "ringing" | "active" | "ended" | "missed" | "declined" | "connecting"
 }) {
-  if (kind === "video") {
-    return <VideoStage initials={initials} localStream={localStream} />
+  if (kind === "video" || sharing) {
+    return (
+      <VideoStage
+        initials={initials}
+        localStream={localStream}
+        screenStream={screenStream}
+        sharing={sharing}
+      />
+    )
   }
 
   return (

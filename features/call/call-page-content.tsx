@@ -7,17 +7,23 @@ import { toast } from "sonner"
 import { CallDock } from "./call-dock"
 import { CallHeader } from "./call-header"
 import { CallStage } from "./call-stage"
+import { useCallMedia } from "./use-call-media"
 import { useIdleChrome } from "./use-idle-chrome"
-import { useLocalMedia } from "./use-local-media"
 import { useStartCall } from "./use-start-call"
-import { formatCallTime, LAST_CALL_KEY, parseCallType, persistLiveCallId } from "../../lib/call"
+import {
+  formatCallTime,
+  LAST_CALL_KEY,
+  parseCallType,
+  persistLiveCallId,
+} from "../../lib/call"
 import { initialsFromName } from "../../lib/data/settings"
+import { emitCallLeave } from "../../lib/realtime/socket"
 import { mutationErrorMessage } from "../../lib/store/api-error"
 import {
   useEndCallMutation,
   useGetCallQuery,
 } from "../../lib/store/calls-api"
-import { playSound } from "../../lib/sounds"
+import { playSound, startSoundLoop, stopSoundLoop } from "../../lib/sounds"
 import type { CallLiveStatus } from "../../lib/types/call"
 
 export function CallPageContent() {
@@ -30,11 +36,14 @@ export function CallPageContent() {
   const peerName = params.get("peer")?.trim() || ""
   const started = useRef(false)
   const ended = useRef(false)
+  const ignoreEndUntil = useRef(0)
+  const connectedSound = useRef(false)
   const { startCall, isStarting } = useStartCall()
   const [endCallMut] = useEndCallMutation()
   const { data: live, isLoading, isError } = useGetCallQuery(callId, {
     skip: !callId,
-    pollingInterval: callId ? 2000 : 0,
+    // Socket call:ended updates cache; keep light polling as backup only.
+    pollingInterval: callId ? 4000 : 0,
   })
 
   const peer = live?.peer.name || peerName || "ChatWave"
@@ -44,15 +53,14 @@ export function CallPageContent() {
       ? "ringing"
       : "connecting")
   const active = status === "active"
+  const waiting = !live && (isLoading || isStarting || !callId)
+  const ringing = !active && !ended.current && (waiting || status === "ringing" || status === "connecting")
 
   const [seconds, setSeconds] = useState(0)
-  const [muted, setMuted] = useState(false)
-  const [cameraOff, setCameraOff] = useState(false)
   const [speakerOn, setSpeakerOn] = useState(true)
-  const [sharing, setSharing] = useState(false)
-
-  const chromeVisible = useIdleChrome(kind === "video")
-  const localStream = useLocalMedia(kind === "video" && !cameraOff)
+  const media = useCallMedia(kind)
+  const stopAllMedia = media.stopAll
+  const chromeVisible = useIdleChrome(kind === "video" || media.sharing)
   const timer = formatCallTime(seconds)
 
   useEffect(() => {
@@ -77,8 +85,20 @@ export function CallPageContent() {
   }, [callId, conversationId, kind, peerName, router, startCall, userId])
 
   useEffect(() => {
+    if (!ringing) {
+      stopSoundLoop("incoming")
+      return
+    }
+    startSoundLoop("incoming")
+    return () => stopSoundLoop("incoming")
+  }, [ringing])
+
+  useEffect(() => {
+    if (!active || connectedSound.current) return
+    connectedSound.current = true
+    stopSoundLoop("incoming")
     playSound("callStart")
-  }, [])
+  }, [active])
 
   useEffect(() => {
     if (!active) return
@@ -96,6 +116,8 @@ export function CallPageContent() {
     if (live.status === "ended" || live.status === "missed" || live.status === "declined") {
       if (ended.current) return
       ended.current = true
+      stopSoundLoop("incoming")
+      stopAllMedia()
       playSound("callEnd")
       toast(
         live.status === "declined"
@@ -106,25 +128,48 @@ export function CallPageContent() {
       )
       router.replace("/calls")
     }
-  }, [live, router])
+  }, [live, router, stopAllMedia])
 
-  async function endCall() {
+  function endCall() {
     if (ended.current) return
+    // Stopping screen share can shift the dock; ignore accidental End clicks briefly.
+    if (Date.now() < ignoreEndUntil.current) return
     ended.current = true
+    stopSoundLoop("incoming")
     playSound("callEnd")
-    if (callId) {
-      try {
-        await endCallMut({ id: callId, ice: "unknown" }).unwrap()
-      } catch (error) {
-        toast.error(mutationErrorMessage(error, "Could not end call"))
-      }
-    }
+    const id = callId
+    // Leave the UI immediately; hang-up continues in the background.
+    persistLiveCallId(null)
+    media.stopAll()
     sessionStorage.setItem(LAST_CALL_KEY, `${peer} · ${timer}`)
     toast("Call ended")
     router.replace("/calls")
+    if (!id) return
+    void endCallMut({ id })
+      .unwrap()
+      .then(() => emitCallLeave(id))
+      .catch((error) => {
+        toast.error(mutationErrorMessage(error, "Could not end call"))
+      })
   }
 
-  const waiting = !live && (isLoading || isStarting || !callId)
+  async function toggleShare(next: boolean) {
+    if (!active) return
+    try {
+      if (next) {
+        await media.startShare()
+        toast("Sharing your screen")
+      } else {
+        ignoreEndUntil.current = Date.now() + 600
+        media.stopShare()
+        toast("Stopped sharing")
+      }
+    } catch (error) {
+      toast.error(
+        mutationErrorMessage(error, "Could not share screen. Allow screen access and try again.")
+      )
+    }
+  }
 
   return (
     <section
@@ -137,7 +182,7 @@ export function CallPageContent() {
       <CallHeader
         peer={peer}
         kind={kind}
-        timer={active ? timer : status === "ringing" ? "Ringing" : "Connecting"}
+        timer={active ? timer : status === "ringing" || waiting ? "Ringing" : "Connecting"}
         visible={chromeVisible}
       />
       {isError && callId ? (
@@ -149,22 +194,25 @@ export function CallPageContent() {
           kind={kind}
           peer={peer}
           initials={initials}
-          localStream={localStream}
+          localStream={media.camera}
+          screenStream={media.screen}
+          sharing={media.sharing}
           status={waiting ? "ringing" : status}
         />
       )}
       <CallDock
         kind={kind}
-        muted={muted}
-        cameraOff={cameraOff}
+        muted={media.muted}
+        cameraOff={media.cameraOff}
         speakerOn={speakerOn}
-        sharing={sharing}
+        sharing={media.sharing}
         visible={chromeVisible}
-        onMutedChange={setMuted}
-        onCameraOffChange={setCameraOff}
+        controlsEnabled={active}
+        onMutedChange={media.setMuted}
+        onCameraOffChange={media.setCameraOff}
         onSpeakerOnChange={setSpeakerOn}
-        onSharingChange={setSharing}
-        onEnd={() => void endCall()}
+        onSharingChange={(value) => void toggleShare(value)}
+        onEnd={endCall}
       />
     </section>
   )
