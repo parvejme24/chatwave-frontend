@@ -3,6 +3,7 @@
 import { useEffect } from "react"
 import { useRouter } from "next/navigation"
 
+import { Skeleton } from "../../components/ui/skeleton"
 import { useGetMyUserQuery } from "../../lib/store/users-api"
 import {
   selectAccessToken,
@@ -27,8 +28,18 @@ export function RequireAuth({ children }: { children: React.ReactNode }) {
 
   if (!hydrated || (!user && isFetching) || !user) {
     return (
-      <div className="grid h-dvh place-items-center bg-paper text-sm text-ink-3">
-        Loading…
+      <div
+        className="grid h-dvh place-items-center bg-paper px-6"
+        aria-busy
+        aria-label="Loading"
+      >
+        <div className="flex w-full max-w-[280px] flex-col items-center gap-4">
+          <Skeleton className="size-12 rounded-[14px] bg-surface-2" />
+          <div className="w-full space-y-2">
+            <Skeleton className="mx-auto h-3.5 w-[48%] rounded-md bg-surface-2" />
+            <Skeleton className="mx-auto h-3 w-[64%] rounded-md bg-surface-2" />
+          </div>
+        </div>
       </div>
     )
   }

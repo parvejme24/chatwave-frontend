@@ -4,6 +4,7 @@ import { useState } from "react"
 import { toast } from "sonner"
 
 import { SettingRow } from "./setting-row"
+import { ContactListSkeleton } from "../../components/shared/loading-skeletons"
 import { Button } from "../../components/ui/button"
 import {
   Dialog,
@@ -108,9 +109,7 @@ export function PrivacyCard({
           </DialogHeader>
           <div className="max-h-[360px] overflow-y-auto px-3 pb-4">
             {isFetching && total === 0 ? (
-              <p className="px-2 py-8 text-center text-sm text-ink-3">
-                Loading…
-              </p>
+              <ContactListSkeleton count={3} className="px-1" />
             ) : total === 0 ? (
               <p className="px-2 py-8 text-center text-sm text-ink-3">
                 You have not blocked anyone.

@@ -5,6 +5,7 @@ import { useState } from "react"
 import { toast } from "sonner"
 
 import { UserHistoryDialog } from "./user-history-dialog"
+import { ContactListSkeleton } from "../../components/shared/loading-skeletons"
 import { UserAvatar } from "../../components/shared/user-avatar"
 import { Input } from "../../components/ui/input"
 import { useDebouncedValue } from "../../lib/hooks/use-debounced-value"
@@ -104,15 +105,17 @@ export function UserDirectory() {
 
       <div className="px-2.5 pt-2 pb-3">
         {!users.length ? (
-          <p className="px-3 py-8 text-center text-sm text-ink-3">
-            {isError
-              ? mutationErrorMessage(error, "Could not load accounts")
-              : isFetching
-              ? "Loading accounts…"
-              : query.trim()
-                ? "No accounts match that search."
-                : "No accounts yet."}
-          </p>
+          isFetching && !isError ? (
+            <ContactListSkeleton count={5} className="px-1" />
+          ) : (
+            <p className="px-3 py-8 text-center text-sm text-ink-3">
+              {isError
+                ? mutationErrorMessage(error, "Could not load accounts")
+                : query.trim()
+                  ? "No accounts match that search."
+                  : "No accounts yet."}
+            </p>
+          )
         ) : (
           users.map((user) => {
             const banned = user.status === "banned"
