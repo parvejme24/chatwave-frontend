@@ -1,7 +1,7 @@
 "use client"
 
 import { zodResolver } from "@hookform/resolvers/zod"
-import { Loader2, LogIn } from "lucide-react"
+import { FlaskConical, Loader2, LogIn } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useForm, type SubmitErrorHandler } from "react-hook-form"
@@ -12,7 +12,11 @@ import { MotionItem } from "../../components/motion/motion-item"
 import { Button } from "../../components/ui/button"
 import { Input } from "../../components/ui/input"
 import { Label } from "../../components/ui/label"
-import { useLoginMutation } from "../../lib/store/auth-api"
+import { DEMO_ACCOUNT } from "../../lib/auth/demo-account"
+import {
+  useLoginMutation,
+  useRegisterMutation,
+} from "../../lib/store/auth-api"
 import { mutationErrorMessage } from "../../lib/store/api-error"
 import { signInSchema, type SignInValues } from "../../lib/validations/auth"
 
@@ -21,7 +25,8 @@ const inputClassName =
 
 export function SignInForm() {
   const router = useRouter()
-  const [login, { isLoading }] = useLoginMutation()
+  const [login, { isLoading: isLoggingIn }] = useLoginMutation()
+  const [registerAccount, { isLoading: isRegistering }] = useRegisterMutation()
   const form = useForm<SignInValues>({
     resolver: zodResolver(signInSchema),
     defaultValues: { email: "", password: "" },
@@ -30,7 +35,8 @@ export function SignInForm() {
   const email = form.watch("email")
   const password = form.watch("password")
   const isComplete = email.trim().length > 0 && password.trim().length > 0
-  const isSubmitting = isLoading || form.formState.isSubmitting
+  const isSubmitting =
+    isLoggingIn || isRegistering || form.formState.isSubmitting
 
   const onInvalid: SubmitErrorHandler<SignInValues> = (errors) => {
     if (errors.email) {
@@ -53,6 +59,44 @@ export function SignInForm() {
       router.push("/chats")
     } catch (error) {
       toast.error(mutationErrorMessage(error, "Could not sign in"))
+    }
+  }
+
+  async function useDemoAccount() {
+    form.setValue("email", DEMO_ACCOUNT.email, { shouldValidate: true })
+    form.setValue("password", DEMO_ACCOUNT.password, { shouldValidate: true })
+
+    try {
+      await login({
+        email: DEMO_ACCOUNT.email,
+        password: DEMO_ACCOUNT.password,
+      }).unwrap()
+      toast.success("Signed in with demo account")
+      router.push("/chats")
+      return
+    } catch {
+      /* Demo user may not exist yet — create then sign in. */
+    }
+
+    try {
+      await registerAccount({
+        name: DEMO_ACCOUNT.name,
+        email: DEMO_ACCOUNT.email,
+        password: DEMO_ACCOUNT.password,
+      }).unwrap()
+      await login({
+        email: DEMO_ACCOUNT.email,
+        password: DEMO_ACCOUNT.password,
+      }).unwrap()
+      toast.success("Demo account ready — signed in")
+      router.push("/chats")
+    } catch (error) {
+      toast.error(
+        mutationErrorMessage(
+          error,
+          "Could not start the demo account. Try signing up manually."
+        )
+      )
     }
   }
 
@@ -113,6 +157,79 @@ export function SignInForm() {
           </Button>
         </MotionItem>
       </form>
+
+      <MotionItem delay={0.22}>
+        <div className="relative mt-4 overflow-hidden rounded-[16px] border border-signal/20 bg-signal-wash">
+          <div
+            className="pointer-events-none absolute inset-y-0 left-0 w-[3px] bg-signal"
+            aria-hidden
+          />
+          <div className="px-4 pt-3.5 pb-3.5 pl-[18px]">
+            <div className="flex items-start gap-2.5">
+              <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-[10px] bg-signal text-white shadow-[0_6px_16px_-8px_rgba(43,63,255,0.7)]">
+                <FlaskConical className="size-4 stroke-[1.75]" aria-hidden />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-[13.5px] font-semibold tracking-[-0.01em] text-ink">
+                  Try a demo account
+                </p>
+                <p className="mt-0.5 text-[12px] leading-snug text-ink-3">
+                  Instant access for portfolio reviews — no signup needed.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-3 grid gap-2.5">
+              <div className="space-y-1">
+                <Label
+                  htmlFor="demo-email"
+                  className="text-[11px] font-semibold tracking-[0.04em] text-ink-3 uppercase"
+                >
+                  Email
+                </Label>
+                <Input
+                  id="demo-email"
+                  type="email"
+                  readOnly
+                  value={DEMO_ACCOUNT.email}
+                  onFocus={(event) => event.currentTarget.select()}
+                  className="h-10 cursor-text rounded-[11px] border-edge/80 bg-surface font-mono text-[13px] text-ink shadow-none focus-visible:border-signal focus-visible:ring-2 focus-visible:ring-signal-wash"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label
+                  htmlFor="demo-password"
+                  className="text-[11px] font-semibold tracking-[0.04em] text-ink-3 uppercase"
+                >
+                  Password
+                </Label>
+                <Input
+                  id="demo-password"
+                  type="text"
+                  readOnly
+                  value={DEMO_ACCOUNT.password}
+                  onFocus={(event) => event.currentTarget.select()}
+                  className="h-10 cursor-text rounded-[11px] border-edge/80 bg-surface font-mono text-[13px] text-ink shadow-none focus-visible:border-signal focus-visible:ring-2 focus-visible:ring-signal-wash"
+                />
+              </div>
+            </div>
+
+            <button
+              type="button"
+              disabled={isSubmitting}
+              onClick={() => void useDemoAccount()}
+              className="mt-3 flex h-[42px] w-full cursor-pointer items-center justify-center gap-2 rounded-[12px] bg-ink text-[13.5px] font-medium tracking-[-0.01em] text-paper transition-[transform,background-color,opacity] duration-200 hover:-translate-y-px hover:bg-ink/90 disabled:pointer-events-none disabled:opacity-50 dark:bg-white dark:text-[#0A0D13] dark:hover:bg-white/90"
+            >
+              {isSubmitting ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden />
+              ) : (
+                <FlaskConical className="size-4 stroke-[1.75]" aria-hidden />
+              )}
+              Continue with demo
+            </button>
+          </div>
+        </div>
+      </MotionItem>
 
       <MotionItem delay={0.25}>
         <p className="mt-[26px] text-[14.5px] text-ink-3">
