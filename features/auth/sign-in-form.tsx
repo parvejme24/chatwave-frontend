@@ -1,9 +1,10 @@
 "use client"
 
 import { zodResolver } from "@hookform/resolvers/zod"
-import { FlaskConical, Loader2, LogIn } from "lucide-react"
+import { Loader2, LogIn, Sparkles } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { useState } from "react"
 import { useForm, type SubmitErrorHandler } from "react-hook-form"
 import { toast } from "sonner"
 
@@ -12,7 +13,11 @@ import { MotionItem } from "../../components/motion/motion-item"
 import { Button } from "../../components/ui/button"
 import { Input } from "../../components/ui/input"
 import { Label } from "../../components/ui/label"
-import { DEMO_ACCOUNT } from "../../lib/auth/demo-account"
+import { Separator } from "../../components/ui/separator"
+import {
+  DEMO_ACCOUNTS,
+  type DemoAccount,
+} from "../../lib/auth/demo-account"
 import {
   useLoginMutation,
   useRegisterMutation,
@@ -27,6 +32,9 @@ export function SignInForm() {
   const router = useRouter()
   const [login, { isLoading: isLoggingIn }] = useLoginMutation()
   const [registerAccount, { isLoading: isRegistering }] = useRegisterMutation()
+  const [activeDemoId, setActiveDemoId] = useState<DemoAccount["id"] | null>(
+    null
+  )
   const form = useForm<SignInValues>({
     resolver: zodResolver(signInSchema),
     defaultValues: { email: "", password: "" },
@@ -62,41 +70,44 @@ export function SignInForm() {
     }
   }
 
-  async function useDemoAccount() {
-    form.setValue("email", DEMO_ACCOUNT.email, { shouldValidate: true })
-    form.setValue("password", DEMO_ACCOUNT.password, { shouldValidate: true })
+  async function useDemoAccount(account: DemoAccount) {
+    setActiveDemoId(account.id)
+    form.setValue("email", account.email, { shouldValidate: true })
+    form.setValue("password", account.password, { shouldValidate: true })
 
     try {
-      await login({
-        email: DEMO_ACCOUNT.email,
-        password: DEMO_ACCOUNT.password,
-      }).unwrap()
-      toast.success("Signed in with demo account")
-      router.push("/chats")
-      return
-    } catch {
-      /* Demo user may not exist yet — create then sign in. */
-    }
+      try {
+        await login({
+          email: account.email,
+          password: account.password,
+        }).unwrap()
+        toast.success(`Signed in as ${account.label}`)
+        router.push("/chats")
+        return
+      } catch {
+        /* Demo user may not exist yet — create then sign in. */
+      }
 
-    try {
       await registerAccount({
-        name: DEMO_ACCOUNT.name,
-        email: DEMO_ACCOUNT.email,
-        password: DEMO_ACCOUNT.password,
+        name: account.name,
+        email: account.email,
+        password: account.password,
       }).unwrap()
       await login({
-        email: DEMO_ACCOUNT.email,
-        password: DEMO_ACCOUNT.password,
+        email: account.email,
+        password: account.password,
       }).unwrap()
-      toast.success("Demo account ready — signed in")
+      toast.success(`${account.label} ready — signed in`)
       router.push("/chats")
     } catch (error) {
       toast.error(
         mutationErrorMessage(
           error,
-          "Could not start the demo account. Try signing up manually."
+          `Could not start ${account.label}. Try signing up manually.`
         )
       )
+    } finally {
+      setActiveDemoId(null)
     }
   }
 
@@ -148,7 +159,7 @@ export function SignInForm() {
             disabled={!isComplete || isSubmitting}
             className="h-[46px] w-full gap-2 rounded-[14px] bg-signal text-[14.5px] font-medium tracking-[-0.01em] text-white hover:bg-signal-deep focus-visible:border-signal focus-visible:ring-signal-wash"
           >
-            {isSubmitting ? (
+            {isSubmitting && !activeDemoId ? (
               <Loader2 className="size-4 animate-spin" aria-hidden />
             ) : (
               <LogIn className="size-4 stroke-[1.75]" aria-hidden />
@@ -159,74 +170,59 @@ export function SignInForm() {
       </form>
 
       <MotionItem delay={0.22}>
-        <div className="relative mt-4 overflow-hidden rounded-[16px] border border-signal/20 bg-signal-wash">
-          <div
-            className="pointer-events-none absolute inset-y-0 left-0 w-[3px] bg-signal"
-            aria-hidden
-          />
-          <div className="px-4 pt-3.5 pb-3.5 pl-[18px]">
-            <div className="flex items-start gap-2.5">
-              <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-[10px] bg-signal text-white shadow-[0_6px_16px_-8px_rgba(43,63,255,0.7)]">
-                <FlaskConical className="size-4 stroke-[1.75]" aria-hidden />
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="text-[13.5px] font-semibold tracking-[-0.01em] text-ink">
-                  Try a demo account
-                </p>
-                <p className="mt-0.5 text-[12px] leading-snug text-ink-3">
-                  Instant access for portfolio reviews — no signup needed.
-                </p>
-              </div>
-            </div>
+        <div className="my-5 flex items-center gap-3.5">
+          <Separator className="flex-1 bg-edge" />
+          <span className="shrink-0 font-mono text-[11px] tracking-[0.14em] text-ink-4 uppercase">
+            or test the app
+          </span>
+          <Separator className="flex-1 bg-edge" />
+        </div>
 
-            <div className="mt-3 grid gap-2.5">
-              <div className="space-y-1">
-                <Label
-                  htmlFor="demo-email"
-                  className="text-[11px] font-semibold tracking-[0.04em] text-ink-3 uppercase"
-                >
-                  Email
-                </Label>
-                <Input
-                  id="demo-email"
-                  type="email"
-                  readOnly
-                  value={DEMO_ACCOUNT.email}
-                  onFocus={(event) => event.currentTarget.select()}
-                  className="h-10 cursor-text rounded-[11px] border-edge/80 bg-surface font-mono text-[13px] text-ink shadow-none focus-visible:border-signal focus-visible:ring-2 focus-visible:ring-signal-wash"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label
-                  htmlFor="demo-password"
-                  className="text-[11px] font-semibold tracking-[0.04em] text-ink-3 uppercase"
-                >
-                  Password
-                </Label>
-                <Input
-                  id="demo-password"
-                  type="text"
-                  readOnly
-                  value={DEMO_ACCOUNT.password}
-                  onFocus={(event) => event.currentTarget.select()}
-                  className="h-10 cursor-text rounded-[11px] border-edge/80 bg-surface font-mono text-[13px] text-ink shadow-none focus-visible:border-signal focus-visible:ring-2 focus-visible:ring-signal-wash"
-                />
-              </div>
-            </div>
+        <div className="rounded-[16px] border-2 border-dashed border-signal/45 bg-signal-wash px-4 py-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-1 rounded-md bg-signal px-2 py-0.5 text-[10px] font-semibold tracking-[0.08em] text-white uppercase">
+              <Sparkles className="size-3 stroke-[2]" aria-hidden />
+              Test access
+            </span>
+            <span className="text-[11px] font-medium text-signal">
+              2 accounts · 2 browsers
+            </span>
+          </div>
 
-            <button
-              type="button"
-              disabled={isSubmitting}
-              onClick={() => void useDemoAccount()}
-              className="mt-3 flex h-[42px] w-full cursor-pointer items-center justify-center gap-2 rounded-[12px] bg-ink text-[13.5px] font-medium tracking-[-0.01em] text-paper transition-[transform,background-color,opacity] duration-200 hover:-translate-y-px hover:bg-ink/90 disabled:pointer-events-none disabled:opacity-50 dark:bg-white dark:text-[#0A0D13] dark:hover:bg-white/90"
-            >
-              {isSubmitting ? (
-                <Loader2 className="size-4 animate-spin" aria-hidden />
-              ) : (
-                <FlaskConical className="size-4 stroke-[1.75]" aria-hidden />
-              )}
-              Continue with demo
-            </button>
+          <p className="mt-2.5 text-[15px] font-semibold tracking-[-0.015em] text-ink">
+            Login with test accounts
+          </p>
+
+          <div className="mt-3.5 grid grid-cols-2 gap-2 sm:gap-2.5">
+            {DEMO_ACCOUNTS.map((account) => {
+              const busy = activeDemoId === account.id
+              return (
+                <Button
+                  key={account.id}
+                  type="button"
+                  variant="outline"
+                  disabled={isSubmitting}
+                  onClick={() => void useDemoAccount(account)}
+                  className="h-auto min-h-[56px] w-full flex-col items-start justify-center gap-0.5 rounded-[14px] border-2 border-signal bg-surface px-2.5 py-2.5 text-left whitespace-normal sm:min-h-[60px] sm:px-3 hover:bg-signal hover:text-white"
+                >
+                  <span className="flex w-full items-center gap-1 text-[12.5px] font-semibold sm:text-[13.5px]">
+                    {busy ? (
+                      <Loader2
+                        className="size-3.5 shrink-0 animate-spin"
+                        aria-hidden
+                      />
+                    ) : null}
+                    <span className="truncate">{account.label}</span>
+                  </span>
+                  <span className="w-full text-[10.5px] leading-tight font-medium opacity-80 sm:text-[11px]">
+                    {account.browserHint}
+                  </span>
+                  <span className="w-full truncate text-[10px] leading-tight opacity-70 sm:text-[10.5px]">
+                    {account.email}
+                  </span>
+                </Button>
+              )
+            })}
           </div>
         </div>
       </MotionItem>

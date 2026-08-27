@@ -107,7 +107,7 @@ The UI is feature-organized and type-safe. **Axios + RTK Query** talk to REST AP
 | | |
 | --- | --- |
 | **Live** | [chatwave-pvj.vercel.app](https://chatwave-pvj.vercel.app/) |
-| **Demo login** | `mdparvejmep@gmail.com` / `12345678` (or tap **Continue with demo** on the sign-in page) |
+| **Demo login** | Use **Test User A** in one browser and **Test User B** in another to test chat & calls (`mdparvejmep@gmail.com` / `mdparvejme24@gmail.com`, password `12345678`) |
 | **Sign in** | Create your own account, or use the demo credentials above |
 
 > Tip for portfolio reviewers: open the live URL, sign up, start a chat, and try an audio call to see the ringing → connected control flow.
