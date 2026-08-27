@@ -7,13 +7,11 @@ import { useRouter } from "next/navigation"
 import { useForm, type SubmitErrorHandler } from "react-hook-form"
 import { toast } from "sonner"
 
-import { OAuthButtons } from "./oauth-buttons"
 import { PasswordField } from "./password-field"
 import { MotionItem } from "../../components/motion/motion-item"
 import { Button } from "../../components/ui/button"
 import { Input } from "../../components/ui/input"
 import { Label } from "../../components/ui/label"
-import { Separator } from "../../components/ui/separator"
 import { useRegisterMutation } from "../../lib/store/auth-api"
 import { mutationErrorMessage } from "../../lib/store/api-error"
 import { signUpSchema, type SignUpValues } from "../../lib/validations/auth"
@@ -134,17 +132,7 @@ export function SignUpForm() {
         </MotionItem>
       </form>
 
-      <MotionItem delay={0.3} className="my-[22px] flex items-center gap-3.5">
-        <Separator className="flex-1 bg-edge" />
-        <span className="font-mono text-[11px] tracking-[0.12em] text-ink-4 uppercase">
-          or continue with
-        </span>
-        <Separator className="flex-1 bg-edge" />
-      </MotionItem>
-
-      <OAuthButtons disabled={isSubmitting} />
-
-      <MotionItem delay={0.42}>
+      <MotionItem delay={0.3}>
         <p className="mt-[26px] text-[14.5px] text-ink-3">
           Already have an account?{" "}
           <Link

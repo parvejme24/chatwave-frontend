@@ -21,7 +21,7 @@ export type AuthArtProps = {
 const defaultStats: AuthArtStat[] = [
   { value: "<80ms", label: "message delivery" },
   { value: "P2P", label: "encrypted calls" },
-  { value: "3", label: "ways to sign in" },
+  { value: "1", label: "secure sign-in" },
 ]
 
 export function AuthArt({

@@ -1,5 +1,11 @@
-import { redirect } from "next/navigation"
+import type { Metadata } from "next"
 
-export default function HomePage() {
-  redirect("/sign-in")
+import { SignInPage } from "../features/auth/sign-in-page"
+
+export const metadata: Metadata = {
+  title: "Sign in",
+  description:
+    "Messaging, voice notes, and calls that stay in sync across every device.",
 }
+
+export default SignInPage

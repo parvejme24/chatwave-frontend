@@ -46,7 +46,7 @@ The UI is feature-organized and type-safe. **Axios + RTK Query** talk to REST AP
 - Online presence via **Socket.IO Client** realtime bridge
 
 ### Account & settings
-- Email/password auth plus Google & GitHub sign-in options
+- Email/password authentication
 - Profile, appearance (light / dark / system), sounds, privacy
 - Owner-only **admin** tools at `/advanced`
 
@@ -117,8 +117,7 @@ The UI is feature-organized and type-safe. **Axios + RTK Query** talk to REST AP
 
 | Path | Screen |
 | --- | --- |
-| `/` | Landing / redirect into auth |
-| `/sign-in` · `/sign-up` · `/forgot-password` | Authentication |
+| `/` · `/sign-in` · `/sign-up` · `/forgot-password` | Authentication |
 | `/chats` · `/chats/[id]` | Conversation list & thread |
 | `/call` | Live audio / video session |
 | `/calls` | Call history |

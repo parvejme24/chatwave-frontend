@@ -22,9 +22,16 @@ export function RequireAuth({ children }: { children: React.ReactNode }) {
   })
 
   useEffect(() => {
-    if (!hydrated || isFetching) return
-    if (!user) router.replace("/sign-in")
-  }, [hydrated, isFetching, router, user])
+    if (!hydrated) return
+    if (!token || (!user && !isFetching)) {
+      router.replace("/sign-in")
+    }
+  }, [hydrated, isFetching, router, token, user])
+
+  // Guests with no session skip the loading chrome and go straight to sign-in.
+  if (hydrated && !token && !user) {
+    return null
+  }
 
   if (!hydrated || (!user && isFetching) || !user) {
     return (

@@ -21,8 +21,7 @@ export function PrivacyPage() {
             "We collect the information needed to run your account and deliver conversations.",
           ],
           bullets: [
-            "Account details: name, email address, and a hashed password if you sign up with email.",
-            "Sign-in from Google or GitHub: the name, email, and profile identifiers those services share with us.",
+            "Account details: name, email address, and a hashed password.",
             "Messages and media you send, so we can deliver them and keep them in sync.",
             "Call signaling data used to connect a call, such as when a call starts or ends.",
             "Device and usage data: browser type, app version, approximate region, and product events that help us keep the service reliable.",
@@ -55,7 +54,6 @@ export function PrivacyPage() {
           bullets: [
             "With people you message or call. They see the content you send them.",
             "With infrastructure providers that host the app, send email, or keep the service online. They may process data only on our instructions.",
-            "With Google or GitHub when you choose those sign-in options.",
             "If we are legally required to disclose information, or to protect people from serious harm.",
             "If ChatWave is transferred as part of a merger or sale, your information may move with the product under this policy or a successor policy.",
           ],
@@ -77,7 +75,7 @@ export function PrivacyPage() {
           title: "Your choices",
           paragraphs: [
             "You can update your name and other profile details in the product. You can request a copy of your information, ask us to correct it, or ask us to delete your account by emailing privacy@chatwave.app.",
-            "If you signed in with Google or GitHub, you can also manage that connection in those products. Depending on where you live, you may have additional rights under local law, including the right to object to certain processing or to lodge a complaint with a regulator.",
+            "Depending on where you live, you may have additional rights under local law, including the right to object to certain processing or to lodge a complaint with a regulator.",
           ],
         },
         {

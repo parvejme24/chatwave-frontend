@@ -19,7 +19,7 @@ export function TermsPage() {
         {
           title: "Your account",
           paragraphs: [
-            "You need an account to use ChatWave. You can sign up with your name, email, and password, or continue with Google or GitHub.",
+            "You need an account to use ChatWave. You can sign up with your name, email, and password.",
             "You must provide accurate details, keep your password to yourself, and tell us if you think someone else has used your account. You are responsible for activity that happens under your login.",
             "You must be at least 13 years old. If you use ChatWave for a company, you confirm you have authority to accept these terms for that company.",
           ],
@@ -48,12 +48,6 @@ export function TermsPage() {
           title: "Calls and encryption",
           paragraphs: [
             "Voice and video calls may use peer-to-peer connections. Signaling still goes through our servers so we can connect the call. Encryption does not mean the service is risk-free. Protect your devices and sign-in details.",
-          ],
-        },
-        {
-          title: "Third-party sign-in",
-          paragraphs: [
-            "If you continue with Google or GitHub, their terms and privacy policies also apply to that sign-in. We only use the account details they share so we can create or open your ChatWave account.",
           ],
         },
         {
