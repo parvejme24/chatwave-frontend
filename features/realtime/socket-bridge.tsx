@@ -13,6 +13,7 @@ import {
   emitJoinConversation,
   emitLeaveConversation,
 } from "../../lib/realtime/socket"
+import { pushWebRtcSignal } from "../../lib/realtime/webrtc-signal-buffer"
 import { playSound, stopSoundLoop } from "../../lib/sounds"
 import { useLogoutMutation } from "../../lib/store/auth-api"
 import { selectAccessToken, selectAuthUser } from "../../lib/store/auth-slice"
@@ -20,6 +21,10 @@ import { callsApi, closeCallInCache } from "../../lib/store/calls-api"
 import { conversationsApi } from "../../lib/store/conversations-api"
 import { useAppDispatch, useAppSelector } from "../../lib/store/hooks"
 import { store } from "../../lib/store/store"
+import {
+  patchConversationSidebar,
+  refetchConversationSidebar,
+} from "../../lib/store/patch-conversation-list"
 import { messagesApi, type GetMessagesArgs } from "../../lib/store/messages-api"
 import {
   notificationFromDto,
@@ -35,14 +40,12 @@ import type { AvatarTone, Conversation } from "../../lib/types/chat"
 import {
   asMessageStatus,
   entityId,
-  formatConversationTime,
   messageFromDto,
   previewFromMessage,
   seenCountFromReceipts,
   seenPeopleFromUnknown,
   statusFromReceipts,
   type ChatMessage,
-  type ConversationsList,
   type MessageDto,
   type MessagesPage,
 } from "../../lib/types/chat"
@@ -218,70 +221,22 @@ export function SocketBridge() {
       }
     }
 
-    function patchConversationLists(mutate: (draft: ConversationsList) => void) {
-      const queries = store.getState()[conversationsApi.reducerPath]?.queries
-      const seen = new Set<string>()
-      if (queries) {
-        for (const entry of Object.values(queries)) {
-          if (!entry || entry.endpointName !== "getConversations") continue
-          const key = JSON.stringify(entry.originalArgs ?? null)
-          if (seen.has(key)) continue
-          seen.add(key)
-          dispatch(
-            conversationsApi.util.updateQueryData(
-              "getConversations",
-              entry.originalArgs as never,
-              mutate
-            )
-          )
-        }
-      }
-      const defaultKey = JSON.stringify({ filter: "all" })
-      if (!seen.has(defaultKey)) {
-        dispatch(
-          conversationsApi.util.updateQueryData(
-            "getConversations",
-            { filter: "all" },
-            mutate
-          )
-        )
-      }
-    }
-
     function bumpConversation(conversationId: string, message: ChatMessage) {
       const viewing = threadIdFromPath(window.location.pathname) === conversationId
-      let found = false
-      patchConversationLists((draft) => {
-        const index = draft.conversations.findIndex((item) => item.id === conversationId)
-        if (index < 0) return
-        found = true
-        const row = draft.conversations[index]!
-        row.preview = previewFromMessage(message)
-        row.time = message.sentAt
-          ? formatConversationTime(message.sentAt)
-          : row.time
-        if (message.dir === "in" && !viewing) {
-          row.unread = (row.unread ?? 0) + 1
-        }
-        if (message.dir === "out") row.unread = 0
-        if (index > 0) {
-          draft.conversations.splice(index, 1)
-          draft.conversations.unshift(row)
-        }
+      const found = patchConversationSidebar(dispatch, store.getState, {
+        conversationId,
+        preview: previewFromMessage(message),
+        lastMessageAt: message.sentAt,
+        clearUnread: message.dir === "out" || viewing,
+        moveToTop: true,
       })
-      if (!found) {
-        dispatch(
-          conversationsApi.util.invalidateTags([{ type: "Conversation", id: "LIST" }])
-        )
-      }
+      if (!found) refetchConversationSidebar(dispatch)
     }
 
     function onMessageNew(payload: unknown) {
       const parsed = messageFromSocket(payload, viewerRef.current)
       if (!parsed) {
-        dispatch(
-          conversationsApi.util.invalidateTags([{ type: "Conversation", id: "LIST" }])
-        )
+        refetchConversationSidebar(dispatch)
         return
       }
       const conversationId = resolveConversationId(
@@ -292,11 +247,7 @@ export function SocketBridge() {
       )
       if (!conversationId) {
         if (!parsed.envelopeId && !parsed.nestedId) {
-          dispatch(
-            conversationsApi.util.invalidateTags([
-              { type: "Conversation", id: "LIST" },
-            ])
-          )
+          refetchConversationSidebar(dispatch)
         }
         return
       }
@@ -309,12 +260,7 @@ export function SocketBridge() {
       }
       upsertThreadMessage(conversationId, message)
       bumpConversation(conversationId, message)
-      if (
-        message.dir === "in" &&
-        threadIdFromPath(window.location.pathname) !== conversationId
-      ) {
-        playSound("notify")
-      }
+      // Sound/toast come from notification:new (user may not be in the thread room).
     }
 
     function onMessageUpdated(payload: unknown) {
@@ -612,6 +558,34 @@ export function SocketBridge() {
           )
         )
       }
+      // Chat list must update even when conversation:preview is missed — the toast
+      // path is the one we know arrives for recipients.
+      if (
+        notification.type === "message" ||
+        notification.type === "group" ||
+        notification.type === "reaction"
+      ) {
+        const conversationId =
+          entityId(notification.conversationId) ||
+          (typeof notification.href === "string" &&
+          notification.href.startsWith("/chats/")
+            ? notification.href.split("/")[2] || ""
+            : "")
+        const viewing =
+          Boolean(conversationId) &&
+          threadIdFromPath(window.location.pathname) === conversationId
+        if (conversationId) {
+          patchConversationSidebar(dispatch, store.getState, {
+            conversationId,
+            preview: notification.body || undefined,
+            lastMessageAt: notification.createdAt || new Date().toISOString(),
+            clearUnread: viewing,
+            moveToTop: true,
+          })
+        }
+        // Always refetch so unread counts match the server even if preview was missed.
+        refetchConversationSidebar(dispatch)
+      }
       if (
         !notifyRef.current ||
         notification.type === "call" ||
@@ -657,9 +631,7 @@ export function SocketBridge() {
     function onConversationRemoved(payload: unknown) {
       const record = asRecord(payload)
       const conversationId = entityId(record?.conversationId)
-      dispatch(
-        conversationsApi.util.invalidateTags([{ type: "Conversation", id: "LIST" }])
-      )
+      refetchConversationSidebar(dispatch)
       if (
         conversationId &&
         threadIdFromPath(window.location.pathname) === conversationId
@@ -669,9 +641,7 @@ export function SocketBridge() {
     }
 
     function onGroupUpdated() {
-      dispatch(
-        conversationsApi.util.invalidateTags([{ type: "Conversation", id: "LIST" }])
-      )
+      refetchConversationSidebar(dispatch)
     }
 
     function onConversationPreview(payload: unknown) {
@@ -685,32 +655,56 @@ export function SocketBridge() {
           : typeof record?.time === "string"
             ? record.time
             : ""
-      if (!conversationId) return
-      let found = false
-      patchConversationLists((draft) => {
-        const index = draft.conversations.findIndex((item) => item.id === conversationId)
-        if (index < 0) return
-        found = true
-        const row = draft.conversations[index]!
-        if (preview) row.preview = preview
-        if (lastMessageAt) row.time = formatConversationTime(lastMessageAt)
-        if (typeof record?.unread === "number") row.unread = record.unread
-        if (
-          typeof record?.previewIcon === "string" ||
-          record?.previewIcon === null
-        ) {
-          row.previewIcon = (record.previewIcon as Conversation["previewIcon"]) || undefined
-        }
-        if (index > 0) {
-          draft.conversations.splice(index, 1)
-          draft.conversations.unshift(row)
-        }
-      })
-      if (!found) {
-        dispatch(
-          conversationsApi.util.invalidateTags([{ type: "Conversation", id: "LIST" }])
-        )
+      if (!conversationId) {
+        refetchConversationSidebar(dispatch)
+        return
       }
+      const found = patchConversationSidebar(dispatch, store.getState, {
+        conversationId,
+        preview: preview || undefined,
+        lastMessageAt: lastMessageAt || undefined,
+        unread: typeof record?.unread === "number" ? record.unread : undefined,
+        previewIcon:
+          typeof record?.previewIcon === "string" || record?.previewIcon === null
+            ? (record.previewIcon as Conversation["previewIcon"] | null)
+            : undefined,
+        moveToTop: true,
+      })
+      if (!found) refetchConversationSidebar(dispatch)
+    }
+
+    function onWebRtcOffer(payload: unknown) {
+      const record = asRecord(payload)
+      const callId = typeof record?.callId === "string" ? record.callId : ""
+      const fromUserId =
+        typeof record?.fromUserId === "string" ? record.fromUserId : ""
+      const sdp = record?.sdp as RTCSessionDescriptionInit | undefined
+      if (!callId || !sdp?.type) return
+      pushWebRtcSignal({ kind: "offer", callId, fromUserId, sdp })
+    }
+
+    function onWebRtcAnswer(payload: unknown) {
+      const record = asRecord(payload)
+      const callId = typeof record?.callId === "string" ? record.callId : ""
+      const fromUserId =
+        typeof record?.fromUserId === "string" ? record.fromUserId : ""
+      const sdp = record?.sdp as RTCSessionDescriptionInit | undefined
+      if (!callId || !sdp?.type) return
+      pushWebRtcSignal({ kind: "answer", callId, fromUserId, sdp })
+    }
+
+    function onWebRtcIce(payload: unknown) {
+      const record = asRecord(payload)
+      const callId = typeof record?.callId === "string" ? record.callId : ""
+      const fromUserId =
+        typeof record?.fromUserId === "string" ? record.fromUserId : ""
+      if (!callId || record?.candidate == null) return
+      pushWebRtcSignal({
+        kind: "ice",
+        callId,
+        fromUserId,
+        candidate: record.candidate as RTCIceCandidateInit,
+      })
     }
 
     socket.on("connect", onConnect)
@@ -731,6 +725,9 @@ export function SocketBridge() {
     socket.on("conversation:removed", onConversationRemoved)
     socket.on("group:updated", onGroupUpdated)
     socket.on("conversation:preview", onConversationPreview)
+    socket.on("webrtc:offer", onWebRtcOffer)
+    socket.on("webrtc:answer", onWebRtcAnswer)
+    socket.on("webrtc:ice", onWebRtcIce)
     if (socket.connected) onConnect()
 
     return () => {
@@ -752,6 +749,9 @@ export function SocketBridge() {
       socket.off("conversation:removed", onConversationRemoved)
       socket.off("group:updated", onGroupUpdated)
       socket.off("conversation:preview", onConversationPreview)
+      socket.off("webrtc:offer", onWebRtcOffer)
+      socket.off("webrtc:answer", onWebRtcAnswer)
+      socket.off("webrtc:ice", onWebRtcIce)
       disconnectSocket()
       dispatch(setSocketConnected(false))
     }

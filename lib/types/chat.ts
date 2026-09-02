@@ -354,6 +354,14 @@ export function entityId(value: unknown): string {
   const record = value as Record<string, unknown>
   if (typeof record.id === "string" && record.id.trim()) return record.id.trim()
   if (typeof record._id === "string" && record._id.trim()) return record._id.trim()
+  if (typeof record.$oid === "string" && record.$oid.trim()) return record.$oid.trim()
+  if (typeof record.conversationId === "string" && record.conversationId.trim()) {
+    return record.conversationId.trim()
+  }
+  if (typeof (value as { toString?: () => string }).toString === "function") {
+    const text = String(value)
+    if (/^[a-f0-9]{24}$/i.test(text)) return text
+  }
   return ""
 }
 
@@ -463,7 +471,7 @@ export function conversationFromDto(
       ? dto.members.map(memberFromDto)
       : undefined
   return {
-    id: dto.id,
+    id: entityId(dto.id) || entityId(dto) || "",
     name: dto.name,
     initials: dto.initials || "?",
     tone: dto.tone || "a",

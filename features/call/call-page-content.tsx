@@ -72,6 +72,8 @@ export function CallPageContent() {
   const stopAllMedia = media.stopAll
   const socketConnected = useAppSelector(selectSocketConnected)
   const isCaller = Boolean(me?.id && live?.initiatedBy && live.initiatedBy === me.id)
+  // Wait until we know who started the call so we don't open a PC as the wrong role.
+  const roleKnown = Boolean(live?.initiatedBy)
   // Callee already knows the caller is in the call once status is active.
   const peerLikelyJoined = active && !isCaller
   const { remoteStream, remoteJoined, hasRemoteVideo, remoteCameraOff } =
@@ -86,6 +88,7 @@ export function CallPageContent() {
     // includes camera tracks (avoids both sides stuck on "Connecting video…").
     enabled:
       webrtcEnabled &&
+      roleKnown &&
       Boolean(live?.peer.id || userId) &&
       (kind === "audio" || Boolean(media.camera) || media.cameraOff),
     socketConnected,

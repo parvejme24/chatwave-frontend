@@ -83,6 +83,10 @@ export function emitWebRtcIce(payload: {
   socket?.emit("webrtc:ice", payload)
 }
 
+export function emitWebRtcReady(payload: { callId: string; toUserId: string }) {
+  socket?.emit("webrtc:ready", payload)
+}
+
 export function emitCallMedia(payload: {
   callId: string
   muted?: boolean

@@ -68,6 +68,12 @@ export function ConversationList() {
   const debounced = useDebouncedValue(query.trim(), 300)
   const filtered = chip !== "all" || debounced.length > 0
   const skipFiltered = !token || chip === "calls" || !filtered
+  // Subscribe directly so RTK cache patches/refetches always re-render the list
+  // (do not rely only on ChatProvider context memoization).
+  const { data: allData, isFetching: allFetching } = useGetConversationsQuery(
+    { filter: "all" },
+    { skip: !token || chip === "calls" }
+  )
   const { data, isFetching } = useGetConversationsQuery(
     { filter: listFilter(chip), q: debounced || undefined },
     { skip: skipFiltered }
@@ -90,14 +96,15 @@ export function ConversationList() {
   const routeId = pathname.startsWith("/chats/")
     ? pathname.split("/")[2]
     : pathname === "/chats" && !isMobile
-      ? conversations[0]?.id
+      ? (allData?.conversations ?? conversations)[0]?.id
       : null
 
-  const shown = useMemo(() => {
-    if (chip === "calls") return []
-    if (!filtered) return conversations
-    return data?.conversations ?? []
-  }, [chip, conversations, data, filtered])
+  const shown =
+    chip === "calls"
+      ? []
+      : !filtered
+        ? (allData?.conversations ?? conversations)
+        : (data?.conversations ?? [])
 
   const searching = query.trim().length > 0
   const pinned = searching ? [] : shown.filter((item) => item.pinned)
@@ -106,7 +113,9 @@ export function ConversationList() {
   const listLoading =
     chip === "calls"
       ? callsFetching && callRows.length === 0
-      : conversationsLoading || (filtered && isFetching && !shown.length)
+      : filtered
+        ? isFetching && shown.length === 0
+        : (allFetching || conversationsLoading) && shown.length === 0
   const listEmpty = chip === "calls" ? callRows.length === 0 : shown.length === 0
 
   useEffect(() => {

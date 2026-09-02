@@ -7,8 +7,13 @@ import {
   emitWebRtcAnswer,
   emitWebRtcIce,
   emitWebRtcOffer,
+  emitWebRtcReady,
   getSocket,
 } from "../../lib/realtime/socket"
+import {
+  subscribeWebRtcSignals,
+  type BufferedSignal,
+} from "../../lib/realtime/webrtc-signal-buffer"
 import type { IceServer } from "../../lib/types/call"
 
 type UseCallWebRtcArgs = {
@@ -50,8 +55,8 @@ function trackIsUsable(track: MediaStreamTrack) {
 }
 
 /**
- * Fast 1:1 WebRTC — reserve audio/video m-lines immediately, offer as soon as
- * the peer is reachable, and retry quickly so "Connecting video…" does not linger.
+ * 1:1 WebRTC. Signaling is buffered globally so offers sent while the callee
+ * is still navigating to /call are not lost.
  */
 export function useCallWebRtc({
   callId,
@@ -77,9 +82,10 @@ export function useCallWebRtc({
   const polite = !isCaller
   const peerReady = useRef(!isCaller)
   const pendingIce = useRef<RTCIceCandidateInit[]>([])
-  const earlyOffer = useRef<RTCSessionDescriptionInit | null>(null)
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null)
-  const lastOfferAt = useRef(0)
+  const offerSentAt = useRef(0)
+  const lastHandledSdp = useRef("")
+  const signalChain = useRef(Promise.resolve())
 
   const peerIdRef = useRef(peerUserId)
   const callIdRef = useRef(callId)
@@ -115,10 +121,11 @@ export function useCallWebRtc({
       pcRef.current?.close()
       pcRef.current = null
       pendingIce.current = []
-      earlyOffer.current = null
       makingOffer.current = false
       peerReady.current = !isCaller
-      lastOfferAt.current = 0
+      offerSentAt.current = 0
+      lastHandledSdp.current = ""
+      signalChain.current = Promise.resolve()
       setRemoteStream(null)
       setRemoteJoined(false)
       setRemoteCameraOff(false)
@@ -144,8 +151,7 @@ export function useCallWebRtc({
     pcRef.current = pc
     peerReady.current = !isCaller
 
-    // Only the caller reserves m-lines. The callee must answer the remote offer
-    // as-is — pre-adding transceivers here causes SDP mismatches and long stalls.
+    // Only the caller creates m-lines. Callee answers the remote offer as-is.
     if (isCaller) {
       pc.addTransceiver("audio", { direction: "sendrecv" })
       if (kind === "video") {
@@ -210,26 +216,27 @@ export function useCallWebRtc({
       }
     }
 
-    async function createOffer(force = false) {
-      if (cancelled || !pcRef.current) return
-      if (isCaller && !peerReady.current && !force) return
+    async function createOffer(opts?: { replaceStuck?: boolean }) {
+      if (cancelled || !pcRef.current || !isCaller) return
+      if (!peerReady.current) return
       const connection = pcRef.current
-      if (remote.getVideoTracks().some(trackIsUsable)) return
-      if (connection.connectionState === "connected" && remote.getTracks().length) {
-        return
+      if (remote.getTracks().some(trackIsUsable)) return
+      if (connection.connectionState === "connected") return
+
+      // Never interrupt a healthy pending answer — this was causing multi-minute stalls.
+      if (connection.signalingState === "have-local-offer") {
+        const waitingMs = Date.now() - offerSentAt.current
+        if (!opts?.replaceStuck || waitingMs < 5000) return
+        try {
+          await connection.setLocalDescription({ type: "rollback" })
+        } catch {
+          return
+        }
       }
-      // Avoid spamming offers more than once per second.
-      if (Date.now() - lastOfferAt.current < 900 && !force) return
+      if (connection.signalingState !== "stable") return
+
       try {
         makingOffer.current = true
-        if (connection.signalingState === "have-local-offer") {
-          try {
-            await connection.setLocalDescription({ type: "rollback" })
-          } catch {
-            return
-          }
-        }
-        if (connection.signalingState !== "stable") return
         syncLocalTracks(
           connection,
           localStreamRef.current,
@@ -239,7 +246,7 @@ export function useCallWebRtc({
         const offer = await connection.createOffer()
         if (cancelled || connection.signalingState !== "stable") return
         await connection.setLocalDescription(offer)
-        lastOfferAt.current = Date.now()
+        offerSentAt.current = Date.now()
         emitWebRtcOffer({
           callId: callIdRef.current,
           toUserId: peerIdRef.current,
@@ -257,6 +264,8 @@ export function useCallWebRtc({
 
     async function handleOffer(sdp: RTCSessionDescriptionInit) {
       if (!pcRef.current) return
+      const fingerprint = `${sdp.type}:${sdp.sdp ?? ""}`
+      if (fingerprint && fingerprint === lastHandledSdp.current) return
       const connection = pcRef.current
       const collision =
         makingOffer.current || connection.signalingState !== "stable"
@@ -271,6 +280,7 @@ export function useCallWebRtc({
         } else {
           await connection.setRemoteDescription(sdp)
         }
+        lastHandledSdp.current = fingerprint
         await flushIce()
         syncLocalTracks(
           connection,
@@ -294,37 +304,8 @@ export function useCallWebRtc({
       }
     }
 
-    async function onOffer(payload: unknown) {
-      const record = asRecord(payload)
-      if (!record || record.callId !== callIdRef.current) return
-      if (
-        typeof record.fromUserId === "string" &&
-        record.fromUserId &&
-        record.fromUserId !== peerIdRef.current
-      ) {
-        return
-      }
-      const sdp = record.sdp as RTCSessionDescriptionInit | undefined
-      if (!sdp?.type) return
-      if (!pcRef.current) {
-        earlyOffer.current = sdp
-        return
-      }
-      await handleOffer(sdp)
-    }
-
-    async function onAnswer(payload: unknown) {
-      const record = asRecord(payload)
-      if (!record || record.callId !== callIdRef.current) return
-      if (
-        typeof record.fromUserId === "string" &&
-        record.fromUserId &&
-        record.fromUserId !== peerIdRef.current
-      ) {
-        return
-      }
-      const sdp = record.sdp as RTCSessionDescriptionInit | undefined
-      if (!sdp?.type || !pcRef.current) return
+    async function handleAnswer(sdp: RTCSessionDescriptionInit) {
+      if (!pcRef.current) return
       try {
         if (pcRef.current.signalingState !== "have-local-offer") return
         await pcRef.current.setRemoteDescription(sdp)
@@ -341,18 +322,7 @@ export function useCallWebRtc({
       }
     }
 
-    async function onIce(payload: unknown) {
-      const record = asRecord(payload)
-      if (!record || record.callId !== callIdRef.current) return
-      if (
-        typeof record.fromUserId === "string" &&
-        record.fromUserId &&
-        record.fromUserId !== peerIdRef.current
-      ) {
-        return
-      }
-      if (record.candidate == null) return
-      const candidate = record.candidate as RTCIceCandidateInit
+    async function handleIce(candidate: RTCIceCandidateInit) {
       if (!pcRef.current?.remoteDescription) {
         pendingIce.current.push(candidate)
         return
@@ -364,14 +334,37 @@ export function useCallWebRtc({
       }
     }
 
+    function enqueueSignal(work: () => Promise<void>) {
+      signalChain.current = signalChain.current
+        .then(work)
+        .catch(() => undefined)
+    }
+
+    function onSignal(signal: BufferedSignal) {
+      if (signal.callId !== callIdRef.current) return
+      // Accept same-call signals even if peer id is briefly stale.
+      enqueueSignal(async () => {
+        if (signal.kind === "offer") await handleOffer(signal.sdp)
+        if (signal.kind === "answer") await handleAnswer(signal.sdp)
+        if (signal.kind === "ice") await handleIce(signal.candidate)
+      })
+    }
+
     function onParticipant(payload: unknown) {
       const record = asRecord(payload)
       if (!record || record.callId !== callIdRef.current) return
-      if (record.userId !== peerIdRef.current) return
+      if (
+        typeof record.userId === "string" &&
+        record.userId &&
+        peerIdRef.current &&
+        record.userId !== peerIdRef.current
+      ) {
+        return
+      }
       if (record.action === "joined") {
         peerReady.current = true
         setRemoteJoined(true)
-        if (isCaller) void createOffer(true)
+        if (isCaller) void createOffer()
       }
       if (record.action === "left") {
         peerReady.current = false
@@ -388,6 +381,7 @@ export function useCallWebRtc({
       if (
         typeof record.userId === "string" &&
         record.userId &&
+        peerIdRef.current &&
         record.userId !== peerIdRef.current
       ) {
         return
@@ -396,53 +390,78 @@ export function useCallWebRtc({
       if (typeof record.muted === "boolean") setRemoteMuted(record.muted)
     }
 
-    socket.on("webrtc:offer", onOffer)
-    socket.on("webrtc:answer", onAnswer)
-    socket.on("webrtc:ice", onIce)
-    socket.on("call:participant", onParticipant)
-    socket.on("call:media", onMedia)
-
-    if (earlyOffer.current) {
-      const pending = earlyOffer.current
-      earlyOffer.current = null
-      void handleOffer(pending)
+    function onReady(payload: unknown) {
+      const record = asRecord(payload)
+      if (!record || record.callId !== callIdRef.current) return
+      if (!isCaller) return
+      peerReady.current = true
+      void createOffer({ replaceStuck: true })
     }
 
-    // Caller offers immediately, then retries every 1s until remote media arrives.
+    const unsubscribeSignals = subscribeWebRtcSignals(callId, onSignal)
+    socket.on("call:participant", onParticipant)
+    socket.on("call:media", onMedia)
+    socket.on("webrtc:ready", onReady)
+
+    // Tell the caller we can accept an offer (covers missed participant events).
+    if (!isCaller && peerIdRef.current) {
+      emitWebRtcReady({
+        callId: callIdRef.current,
+        toUserId: peerIdRef.current,
+      })
+    }
+
     let kickoff: number | undefined
     let retry: number | undefined
+    let readyPulse: number | undefined
     if (isCaller) {
-      let attempts = 0
       kickoff = window.setTimeout(() => {
         if (cancelled) return
         peerReady.current = true
-        void createOffer(true)
-      }, 200)
+        void createOffer()
+      }, 400)
+      // Retry only when idle (stable) or when an offer has been stuck >5s.
       retry = window.setInterval(() => {
         if (cancelled || !pcRef.current) return
         if (remote.getTracks().some(trackIsUsable)) return
-        if (
-          pcRef.current.connectionState === "connected" &&
-          remote.getTracks().length
-        ) {
+        if (pcRef.current.connectionState === "connected") return
+        peerReady.current = true
+        if (pcRef.current.signalingState === "stable") {
+          void createOffer()
           return
         }
-        attempts += 1
-        if (attempts > 20) return
-        peerReady.current = true
-        void createOffer(true)
-      }, 1000)
+        if (
+          pcRef.current.signalingState === "have-local-offer" &&
+          offerSentAt.current > 0 &&
+          Date.now() - offerSentAt.current > 5000
+        ) {
+          void createOffer({ replaceStuck: true })
+        }
+      }, 2000)
+    } else {
+      readyPulse = window.setInterval(() => {
+        if (cancelled || !pcRef.current || !peerIdRef.current) return
+        if (remote.getTracks().some(trackIsUsable)) return
+        if (pcRef.current.connectionState === "connected") return
+        if (pcRef.current.remoteDescription) return
+        emitWebRtcReady({
+          callId: callIdRef.current,
+          toUserId: peerIdRef.current,
+        })
+      }, 2500)
     }
 
     return () => {
       cancelled = true
       if (kickoff != null) window.clearTimeout(kickoff)
       if (retry != null) window.clearInterval(retry)
-      socket.off("webrtc:offer", onOffer)
-      socket.off("webrtc:answer", onAnswer)
-      socket.off("webrtc:ice", onIce)
+      if (readyPulse != null) window.clearInterval(readyPulse)
+      unsubscribeSignals()
       socket.off("call:participant", onParticipant)
       socket.off("call:media", onMedia)
+      socket.off("webrtc:ready", onReady)
+      // Do NOT clear the global signal buffer here — remounts (Strict Mode /
+      // peer id settle) must still see offers that arrived mid-transition.
       teardown()
     }
   }, [enabled, socketConnected, callId, peerUserId, isCaller, kind])
@@ -458,10 +477,6 @@ export function useCallWebRtc({
     emitCallMedia({ callId, muted, cameraOff })
   }, [enabled, callId, muted, cameraOff])
 
-  const hasRemoteVideo = Boolean(
-    remoteStream?.getVideoTracks().some(trackIsUsable) && !remoteCameraOff
-  )
-
   return {
     remoteStream,
     remoteJoined:
@@ -471,7 +486,9 @@ export function useCallWebRtc({
           (remoteStream.getVideoTracks().some(trackIsUsable) ||
             remoteStream.getAudioTracks().some(trackIsUsable))
       ),
-    hasRemoteVideo,
+    hasRemoteVideo: Boolean(
+      remoteStream?.getVideoTracks().some(trackIsUsable) && !remoteCameraOff
+    ),
     remoteCameraOff,
     remoteMuted,
   }

@@ -5,12 +5,13 @@ import type { ChatMessage, MessageDto, MessagesPage, ThreadView } from "../types
 import {
   asMessageType,
   formatChatClock,
-  formatConversationTime,
   messageFromDto,
   previewFromMessage,
 } from "../types/chat"
 import { axiosBaseQuery } from "./base-query"
 import { conversationsApi } from "./conversations-api"
+import { patchConversationSidebar } from "./patch-conversation-list"
+import type { RootState } from "./store"
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object") return null
@@ -56,20 +57,19 @@ function unwrapPage(payload: unknown): MessagesPage {
   }
 }
 
-function bumpConversationPreview(conversationId: string, message: ChatMessage) {
-  return conversationsApi.util.updateQueryData(
-    "getConversations",
-    { filter: "all" },
-    (draft) => {
-      const row = draft.conversations.find((item) => item.id === conversationId)
-      if (!row) return
-      row.preview = previewFromMessage(message)
-      row.time = message.sentAt
-        ? formatConversationTime(message.sentAt)
-        : row.time
-      if (message.dir === "out") row.unread = 0
-    }
-  )
+function bumpConversationPreview(
+  dispatch: (action: unknown) => unknown,
+  getState: () => unknown,
+  conversationId: string,
+  message: ChatMessage
+) {
+  patchConversationSidebar(dispatch, getState as () => RootState, {
+    conversationId,
+    preview: previewFromMessage(message),
+    lastMessageAt: message.sentAt,
+    clearUnread: message.dir === "out",
+    moveToTop: true,
+  })
 }
 
 function conversationGroupMap(getState: () => unknown) {
@@ -285,7 +285,7 @@ export const messagesApi = createApi({
           caption: message.caption || arg.caption,
         }
       },
-      async onQueryStarted(arg, { dispatch, queryFulfilled }) {
+      async onQueryStarted(arg, { dispatch, getState, queryFulfilled }) {
         const uploads = collectFiles(arg)
         const links = (arg.links ?? []).filter(Boolean)
         const blobUrls = uploads.map((file) => URL.createObjectURL(file))
@@ -346,7 +346,7 @@ export const messagesApi = createApi({
             }
           )
         )
-        dispatch(bumpConversationPreview(arg.conversationId, optimistic))
+        bumpConversationPreview(dispatch, getState, arg.conversationId, optimistic)
         try {
           const { data } = await queryFulfilled
           const saved: ChatMessage = {
@@ -382,7 +382,7 @@ export const messagesApi = createApi({
               }
             )
           )
-          dispatch(bumpConversationPreview(arg.conversationId, saved))
+          bumpConversationPreview(dispatch, getState, arg.conversationId, saved)
           for (const url of blobUrls) {
             if (data.mediaUrl || data.attachments?.length) URL.revokeObjectURL(url)
           }

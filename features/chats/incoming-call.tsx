@@ -20,6 +20,7 @@ import {
   selectSocketConnected,
   setIncomingCall,
 } from "../../lib/store/realtime-slice"
+import { emitCallJoin } from "../../lib/realtime/socket"
 import { playSound, startSoundLoop, stopSoundLoop } from "../../lib/sounds"
 
 export function IncomingCall() {
@@ -95,6 +96,8 @@ export function IncomingCall() {
       const live = await acceptCall(callId).unwrap()
       dispatch(setIncomingCall(null))
       stopSoundLoop("incoming")
+      // Join the call room before navigating so we catch the caller's offer.
+      emitCallJoin(live.id || callId)
       const href =
         hrefForLiveCall(live) ||
         (incoming ? hrefForLiveCall(incoming) : "") ||

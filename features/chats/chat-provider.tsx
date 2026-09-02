@@ -101,6 +101,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     { filter: "all" },
     { skip: !token }
   )
+  // Depend on `data` so Immer socket patches always re-render the chat list.
+  const conversations = data?.conversations ?? []
   const [sendMessage] = useSendMessageMutation()
   const [deleteMessageMut] = useDeleteMessageMutation()
   const [toggleReactionMut] = useToggleReactionMutation()
@@ -112,11 +114,6 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [setAdminMut] = useSetConversationMemberAdminMutation()
   const [leaveMut] = useLeaveConversationMutation()
   const [deleteConversationMut] = useDeleteConversationMutation()
-
-  const conversations = useMemo(
-    () => data?.conversations ?? [],
-    [data?.conversations]
-  )
   const [drawerOpen, setDrawerOpenState] = useState(false)
   const [profile, setProfile] = useState<ProfilePerson | null>(null)
   const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null)
@@ -393,6 +390,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     }),
     [
       me,
+      data,
       conversations,
       isFetching,
       drawerOpen,
