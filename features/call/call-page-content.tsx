@@ -8,6 +8,7 @@ import { CallDock } from "./call-dock"
 import { CallHeader } from "./call-header"
 import { CallStage } from "./call-stage"
 import { useCallMedia } from "./use-call-media"
+import { useCallWebRtc } from "./use-call-webrtc"
 import { useIdleChrome } from "./use-idle-chrome"
 import { useStartCall } from "./use-start-call"
 import {
@@ -15,20 +16,25 @@ import {
   LAST_CALL_KEY,
   parseCallType,
   persistLiveCallId,
+  consumeCallRemotelyClosed,
 } from "../../lib/call"
 import { initialsFromName } from "../../lib/data/settings"
 import { emitCallLeave } from "../../lib/realtime/socket"
 import { mutationErrorMessage } from "../../lib/store/api-error"
+import { selectAuthUser } from "../../lib/store/auth-slice"
 import {
   useEndCallMutation,
   useGetCallQuery,
 } from "../../lib/store/calls-api"
+import { useAppSelector } from "../../lib/store/hooks"
+import { selectSocketConnected } from "../../lib/store/realtime-slice"
 import { playSound, startSoundLoop, stopSoundLoop } from "../../lib/sounds"
-import type { CallLiveStatus } from "../../lib/types/call"
+import { callEndedMessage, type CallLiveStatus } from "../../lib/types/call"
 
 export function CallPageContent() {
   const params = useSearchParams()
   const router = useRouter()
+  const me = useAppSelector(selectAuthUser)
   const kind = parseCallType(params.get("type"))
   const callId = params.get("callId")?.trim() || ""
   const conversationId = params.get("conversationId")?.trim() || ""
@@ -40,7 +46,7 @@ export function CallPageContent() {
   const connectedSound = useRef(false)
   const { startCall, isStarting } = useStartCall()
   const [endCallMut] = useEndCallMutation()
-  const { data: live, isLoading, isError } = useGetCallQuery(callId, {
+  const { data: live, isLoading, isError, isFetching } = useGetCallQuery(callId, {
     skip: !callId,
     // Socket call:ended updates cache; keep light polling as backup only.
     pollingInterval: callId ? 4000 : 0,
@@ -55,13 +61,52 @@ export function CallPageContent() {
   const active = status === "active"
   const waiting = !live && (isLoading || isStarting || !callId)
   const ringing = !active && !ended.current && (waiting || status === "ringing" || status === "connecting")
+  // Prepare peer connection while ringing so we don't miss the peer's join.
+  const webrtcEnabled =
+    Boolean(callId) &&
+    (status === "ringing" || status === "active" || status === "connecting")
 
   const [seconds, setSeconds] = useState(0)
   const [speakerOn, setSpeakerOn] = useState(true)
   const media = useCallMedia(kind)
   const stopAllMedia = media.stopAll
+  const socketConnected = useAppSelector(selectSocketConnected)
+  const isCaller = Boolean(me?.id && live?.initiatedBy && live.initiatedBy === me.id)
+  // Callee already knows the caller is in the call once status is active.
+  const peerLikelyJoined = active && !isCaller
+  const { remoteStream, remoteJoined, hasRemoteVideo, remoteCameraOff } =
+    useCallWebRtc({
+    callId,
+    peerUserId: live?.peer.id || userId,
+    iceServers: live?.iceServers,
+    localStream: media.camera,
+    screenStream: media.screen,
+    kind,
+    // Prefer starting WebRTC once local media is ready so the first offer/answer
+    // includes camera tracks (avoids both sides stuck on "Connecting video…").
+    enabled:
+      webrtcEnabled &&
+      Boolean(live?.peer.id || userId) &&
+      (kind === "audio" || Boolean(media.camera) || media.cameraOff),
+    socketConnected,
+    isCaller,
+    muted: media.muted,
+    cameraOff: media.cameraOff,
+    speakerOn,
+  })
+  const showRemoteJoined = remoteJoined || peerLikelyJoined
   const chromeVisible = useIdleChrome(kind === "video" || media.sharing)
   const timer = formatCallTime(seconds)
+  // Don't flash "no longer available" on a transient refetch error while we
+  // still have a live ringing/active call in cache.
+  const callGone =
+    Boolean(callId) &&
+    isError &&
+    !isFetching &&
+    (!live ||
+      live.status === "ended" ||
+      live.status === "missed" ||
+      live.status === "declined")
 
   useEffect(() => {
     if (callId) persistLiveCallId(callId)
@@ -113,22 +158,36 @@ export function CallPageContent() {
 
   useEffect(() => {
     if (!live) return
-    if (live.status === "ended" || live.status === "missed" || live.status === "declined") {
-      if (ended.current) return
-      ended.current = true
-      stopSoundLoop("incoming")
-      stopAllMedia()
+    if (
+      live.status !== "ended" &&
+      live.status !== "missed" &&
+      live.status !== "declined"
+    ) {
+      return
+    }
+    if (ended.current) return
+    ended.current = true
+    stopSoundLoop("incoming")
+    stopAllMedia()
+    const remotelyClosed = consumeCallRemotelyClosed(callId)
+    if (!remotelyClosed) {
       playSound("callEnd")
+      const endedByIsMe = Boolean(live.endedBy && me?.id && live.endedBy === me.id)
+      const endedByName =
+        live.endedBy && !endedByIsMe
+          ? peer.split(" ")[0] || peer
+          : null
       toast(
-        live.status === "declined"
-          ? "Call declined"
-          : live.status === "missed"
-            ? "Missed call"
-            : "Call ended"
+        callEndedMessage(live.status, {
+          endedByIsMe,
+          endedByName,
+        })
       )
+    }
+    if (window.location.pathname.startsWith("/call")) {
       router.replace("/calls")
     }
-  }, [live, router, stopAllMedia])
+  }, [callId, live, me?.id, peer, router, stopAllMedia])
 
   function endCall() {
     if (ended.current) return
@@ -152,7 +211,6 @@ export function CallPageContent() {
         toast.error(mutationErrorMessage(error, "Could not end call"))
       })
   }
-
   async function toggleShare(next: boolean) {
     if (!active) return
     try {
@@ -185,7 +243,7 @@ export function CallPageContent() {
         timer={active ? timer : status === "ringing" || waiting ? "Ringing" : "Connecting"}
         visible={chromeVisible}
       />
-      {isError && callId ? (
+      {callGone ? (
         <p className="relative z-20 m-auto px-6 text-center text-sm text-white/70">
           This call is no longer available.
         </p>
@@ -195,9 +253,14 @@ export function CallPageContent() {
           peer={peer}
           initials={initials}
           localStream={media.camera}
+          remoteStream={remoteStream}
           screenStream={media.screen}
           sharing={media.sharing}
           status={waiting ? "ringing" : status}
+          remoteJoined={showRemoteJoined}
+          hasRemoteVideo={hasRemoteVideo}
+          cameraOff={media.cameraOff}
+          remoteCameraOff={remoteCameraOff}
         />
       )}
       <CallDock

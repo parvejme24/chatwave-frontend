@@ -250,7 +250,7 @@ export function DetailsDrawer({ conversationId }: { conversationId: string }) {
             try {
               await setArchived(conversation.id, true)
             } catch {
-              /* archive is best-effort; backend also archives on block */
+              /* backend also archives on block — still refresh lists */
             }
             const first = person.name.split(" ")[0] || person.name
             toast(

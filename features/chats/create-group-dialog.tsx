@@ -49,7 +49,7 @@ export function CreateGroupDialog({
   }
   const debounced = useDebouncedValue(query.trim(), 300)
   const { data: list, isFetching } = useGetContactsQuery(
-    debounced ? { q: debounced, limit: 500 } : { limit: 500 },
+    debounced ? { q: debounced, limit: 200 } : { limit: 200 },
     { skip: !open }
   )
 

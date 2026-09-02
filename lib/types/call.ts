@@ -58,6 +58,8 @@ export type LiveCall = {
   type: CallType
   status: CallLiveStatus
   initiatedBy: string
+  /** Who hung up / closed the call (user id), when known. */
+  endedBy?: string
   peer: CallPeer
   href: string
   startedAt: string
@@ -115,7 +117,11 @@ export function liveCallFromPayload(payload: unknown): LiveCall | null {
   if (!record) return null
   const nested = asRecord(record.call)
   const call = nested ?? record
-  const id = entityId(call.id) || entityId(call._id) || entityId(call)
+  const id =
+    entityId(call.id) ||
+    entityId(call._id) ||
+    entityId(record.callId) ||
+    entityId(call)
   if (!id) return null
   const peerRecord = asRecord(call.peer)
   const name =
@@ -123,12 +129,24 @@ export function liveCallFromPayload(payload: unknown): LiveCall | null {
     (typeof call.name === "string" && call.name) ||
     "Incoming call"
   const type = call.type === "audio" ? "audio" : "video"
+  const endedBy =
+    entityId(record.endedBy) ||
+    entityId(call.endedBy) ||
+    undefined
+  const durationSec =
+    typeof record.durationSec === "number"
+      ? record.durationSec
+      : typeof call.durationSec === "number"
+        ? call.durationSec
+        : 0
   return {
     id,
-    conversationId: entityId(call.conversationId),
+    conversationId:
+      entityId(record.conversationId) || entityId(call.conversationId),
     type,
-    status: asCallLiveStatus(call.status),
+    status: asCallLiveStatus(record.status ?? call.status),
     initiatedBy: entityId(call.initiatedBy) || entityId(call.createdBy),
+    endedBy: endedBy || undefined,
     peer: {
       id: entityId(peerRecord) || entityId(peerRecord?.id),
       name,
@@ -152,6 +170,18 @@ export function liveCallFromPayload(payload: unknown): LiveCall | null {
     href: typeof call.href === "string" ? call.href : "",
     startedAt: typeof call.startedAt === "string" ? call.startedAt : "",
     answeredAt: typeof call.answeredAt === "string" ? call.answeredAt : null,
-    durationSec: typeof call.durationSec === "number" ? call.durationSec : 0,
+    durationSec,
   }
+}
+
+/** Toast / UI copy for a closed call using status + endedBy. */
+export function callEndedMessage(
+  status: CallLiveStatus | string,
+  options?: { endedByName?: string | null; endedByIsMe?: boolean }
+) {
+  if (status === "declined") return "Call declined"
+  if (status === "missed") return "Missed call"
+  if (options?.endedByIsMe) return "Call ended"
+  if (options?.endedByName) return `${options.endedByName} ended the call`
+  return "Call ended"
 }

@@ -15,13 +15,15 @@ const display = Bricolage_Grotesque({
   axes: ["opsz"],
   display: "swap",
   preload: false,
+  adjustFontFallback: true,
 })
 
 const sans = Inter_Tight({
   subsets: ["latin"],
   variable: "--font-inter-tight",
   display: "swap",
-  preload: false,
+  preload: true,
+  adjustFontFallback: true,
 })
 
 const mono = JetBrains_Mono({
@@ -29,6 +31,7 @@ const mono = JetBrains_Mono({
   variable: "--font-jetbrains",
   display: "swap",
   preload: false,
+  adjustFontFallback: true,
 })
 
 export const metadata: Metadata = {
@@ -59,7 +62,20 @@ export default function RootLayout({
         suppressHydrationWarning
         className={`${sans.className} flex min-h-full flex-col font-sans`}
       >
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider>
+          {/* Touch display/mono so Next does not warn about unused preloads. */}
+          <span
+            aria-hidden
+            className="pointer-events-none fixed top-0 left-0 -z-10 h-px w-px overflow-hidden opacity-0"
+            style={{
+              fontFamily:
+                "var(--font-bricolage), var(--font-jetbrains), sans-serif",
+            }}
+          >
+            .
+          </span>
+          {children}
+        </ThemeProvider>
       </body>
     </html>
   )

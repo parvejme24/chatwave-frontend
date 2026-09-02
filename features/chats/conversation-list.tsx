@@ -325,7 +325,7 @@ export function ConversationList() {
                 {chip === "calls"
                   ? "Voice and video calls from chats will appear here."
                   : chip === "archived"
-                    ? "Archived chats appear here when you use Archive conversation."
+                    ? "Archived and blocked chats appear here."
                     : `Nothing here for ${emptyLabel}.`}
               </p>
             </MotionItem>

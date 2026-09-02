@@ -40,6 +40,11 @@ export function PeopleRail({
 
   function onPointerDown(event: PointerEvent<HTMLDivElement>) {
     if (event.button !== 0 || !scroller.current) return
+    // Don't steal clicks from Follow / Message / Unfollow controls.
+    const target = event.target as HTMLElement | null
+    if (target?.closest("button, a, input, textarea, select, [role='button']")) {
+      return
+    }
     drag.current = {
       active: true,
       startX: event.clientX,
@@ -160,6 +165,7 @@ function PeopleCard({ contact }: { contact: Contact }) {
     if (!personId) return
     try {
       await unfollowUser(personId).unwrap()
+      toast(`Unfollowed ${contact.name}`)
     } catch (error) {
       toast.error(mutationErrorMessage(error, "Could not unfollow"))
     }
@@ -207,6 +213,7 @@ function PeopleCard({ contact }: { contact: Contact }) {
             <Button
               type="button"
               disabled={busy}
+              onPointerDown={(event) => event.stopPropagation()}
               onClick={() => void message()}
               className="h-8 w-full cursor-pointer rounded-[11px] bg-signal px-2 text-[12.5px] font-medium text-white hover:bg-signal-deep"
             >
@@ -216,6 +223,7 @@ function PeopleCard({ contact }: { contact: Contact }) {
               type="button"
               variant="secondary"
               disabled={busy}
+              onPointerDown={(event) => event.stopPropagation()}
               onClick={() => void unfollow()}
               className="h-8 w-full cursor-pointer rounded-[11px] border border-edge bg-surface px-2 text-[12.5px] font-medium text-ink hover:bg-surface-3"
             >
@@ -226,6 +234,7 @@ function PeopleCard({ contact }: { contact: Contact }) {
           <Button
             type="button"
             disabled={busy || (!personId && !contact.user)}
+            onPointerDown={(event) => event.stopPropagation()}
             onClick={() => void follow()}
             className="h-8 w-full cursor-pointer rounded-[11px] bg-signal px-2 text-[12.5px] font-medium text-white hover:bg-signal-deep"
           >

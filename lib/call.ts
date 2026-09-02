@@ -16,6 +16,21 @@ export function persistLiveCallId(id: string | null) {
   else window.localStorage.removeItem(LIVE_CALL_ID_KEY)
 }
 
+const remotelyClosedCalls = new Set<string>()
+
+/** Mark a call closed by socket so the call page can skip a duplicate toast. */
+export function markCallRemotelyClosed(callId: string) {
+  if (!callId) return
+  remotelyClosedCalls.add(callId)
+  window.setTimeout(() => remotelyClosedCalls.delete(callId), 8000)
+}
+
+export function consumeCallRemotelyClosed(callId: string) {
+  if (!callId || !remotelyClosedCalls.has(callId)) return false
+  remotelyClosedCalls.delete(callId)
+  return true
+}
+
 export function endCallKeepalive(id: string) {
   if (typeof window === "undefined" || !id) return
   const token = window.localStorage.getItem(ACCESS_TOKEN_KEY)
@@ -72,5 +87,6 @@ export function hrefForLiveCall(call: LiveCall) {
     callId: call.id,
     conversationId: call.conversationId,
     peer: call.peer?.name,
+    userId: call.peer?.id,
   })
 }

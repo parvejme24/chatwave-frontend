@@ -225,28 +225,15 @@ export const usersApi = createApi({
       providesTags: [{ type: "UserList", id: "SEARCH" }],
     }),
     listUsers: build.query<UsersDirectoryList, SearchUsersArgs | void>({
-      async queryFn(args, _api, _extra, baseQuery) {
-        const params = {
-          limit: Math.min(Math.max(args?.limit ?? 500, 1), 500),
+      query: (args) => ({
+        url: "/api/contacts",
+        params: {
+          limit: Math.min(Math.max(args?.limit ?? 200, 1), 200),
           ...(args?.q?.trim() ? { q: args.q.trim() } : {}),
           ...(args?.presence ? { presence: args.presence } : {}),
-        }
-        // Prefer GET /api/users; fall back to GET /api/contacts (same directory).
-        const primary = await baseQuery({ url: "/api/users", params })
-        if (!primary.error) {
-          return { data: unwrapDirectory(primary.data) }
-        }
-        const status =
-          typeof primary.error === "object" &&
-          primary.error &&
-          "status" in primary.error
-            ? Number((primary.error as { status?: number }).status)
-            : 0
-        if (status && status !== 404) return { error: primary.error }
-        const fallback = await baseQuery({ url: "/api/contacts", params })
-        if (fallback.error) return { error: fallback.error }
-        return { data: unwrapDirectory(fallback.data) }
-      },
+        },
+      }),
+      transformResponse: (response: unknown) => unwrapDirectory(response),
       providesTags: [{ type: "UserList", id: "DIRECTORY" }],
     }),
     getOnlineUsers: build.query<PublicUser[], void>({

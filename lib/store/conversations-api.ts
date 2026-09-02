@@ -171,6 +171,99 @@ export const conversationsApi = createApi({
         data: body,
       }),
       transformResponse: (response: unknown) => unwrapConversation(response),
+      async onQueryStarted(
+        { conversationId, archived, pinned, muted },
+        { dispatch, queryFulfilled }
+      ) {
+        const patches: { undo: () => void }[] = []
+        if (typeof archived === "boolean") {
+          patches.push(
+            dispatch(
+              conversationsApi.util.updateQueryData(
+                "getConversations",
+                { filter: "all" },
+                (draft) => {
+                  const index = draft.conversations.findIndex(
+                    (item) => item.id === conversationId
+                  )
+                  if (index < 0) return
+                  if (archived) {
+                    draft.conversations.splice(index, 1)
+                  } else {
+                    draft.conversations[index].archived = false
+                  }
+                }
+              )
+            )
+          )
+          patches.push(
+            dispatch(
+              conversationsApi.util.updateQueryData(
+                "getConversations",
+                { filter: "archived" },
+                (draft) => {
+                  if (archived) return
+                  const index = draft.conversations.findIndex(
+                    (item) => item.id === conversationId
+                  )
+                  if (index >= 0) draft.conversations.splice(index, 1)
+                }
+              )
+            )
+          )
+        }
+        if (typeof pinned === "boolean" || typeof muted === "boolean") {
+          patches.push(
+            dispatch(
+              conversationsApi.util.updateQueryData(
+                "getConversations",
+                { filter: "all" },
+                (draft) => {
+                  const row = draft.conversations.find(
+                    (item) => item.id === conversationId
+                  )
+                  if (!row) return
+                  if (typeof pinned === "boolean") row.pinned = pinned
+                  if (typeof muted === "boolean") row.muted = muted
+                }
+              )
+            )
+          )
+        }
+        patches.push(
+          dispatch(
+            conversationsApi.util.updateQueryData(
+              "getConversation",
+              conversationId,
+              (draft) => {
+                if (typeof archived === "boolean") draft.archived = archived
+                if (typeof pinned === "boolean") draft.pinned = pinned
+                if (typeof muted === "boolean") draft.muted = muted
+              }
+            )
+          )
+        )
+        try {
+          const { data } = await queryFulfilled
+          if (typeof archived === "boolean" && archived) {
+            // Ensure Archived chip can show the chat (incl. after block).
+            dispatch(
+              conversationsApi.util.updateQueryData(
+                "getConversations",
+                { filter: "archived" },
+                (draft) => {
+                  if (draft.conversations.some((item) => item.id === data.id)) {
+                    return
+                  }
+                  draft.conversations.unshift({ ...data, archived: true })
+                }
+              )
+            )
+          }
+        } catch {
+          for (const patch of patches) patch.undo()
+        }
+      },
       invalidatesTags: (_result, _error, arg) => [
         { type: "Conversation", id: "LIST" },
         { type: "Conversation", id: arg.conversationId },

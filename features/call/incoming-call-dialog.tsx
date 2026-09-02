@@ -48,7 +48,7 @@ export function IncomingCallDialog({
         transition={{ duration: 0.32, ease: signalEase }}
         className="w-full max-w-[340px] rounded-[28px] bg-surface px-[26px] pt-[34px] pb-[26px] text-center shadow-[0_24px_64px_rgba(17,24,33,0.18)]"
       >
-        <div className="mx-auto mb-5">
+        <div className="mb-5 flex justify-center">
           <SpeakRing initials={initials} size="sm" />
         </div>
         <p className="mb-1.5 font-mono text-[11px] font-semibold tracking-[0.16em] text-pulse uppercase">

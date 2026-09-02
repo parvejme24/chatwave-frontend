@@ -4,7 +4,7 @@ import { usePathname, useRouter } from "next/navigation"
 import { useEffect, useRef } from "react"
 import { toast } from "sonner"
 
-import { endCallKeepalive, persistLiveCallId, readLiveCallId } from "../../lib/call"
+import { endCallKeepalive, markCallRemotelyClosed, persistLiveCallId, readLiveCallId } from "../../lib/call"
 import {
   connectSocket,
   disconnectSocket,
@@ -13,7 +13,7 @@ import {
   emitJoinConversation,
   emitLeaveConversation,
 } from "../../lib/realtime/socket"
-import { playSound } from "../../lib/sounds"
+import { playSound, stopSoundLoop } from "../../lib/sounds"
 import { useLogoutMutation } from "../../lib/store/auth-api"
 import { selectAccessToken, selectAuthUser } from "../../lib/store/auth-slice"
 import { callsApi, closeCallInCache } from "../../lib/store/calls-api"
@@ -30,8 +30,8 @@ import {
   setSocketConnected,
   setTyping,
 } from "../../lib/store/realtime-slice"
-import { liveCallFromPayload } from "../../lib/types/call"
-import type { AvatarTone } from "../../lib/types/chat"
+import { liveCallFromPayload, callEndedMessage } from "../../lib/types/call"
+import type { AvatarTone, Conversation } from "../../lib/types/chat"
 import {
   asMessageStatus,
   entityId,
@@ -126,6 +126,12 @@ export function SocketBridge() {
 
     function onConnect() {
       dispatch(setSocketConnected(true))
+      // Re-join the live call room after reconnect so signaling keeps working.
+      const liveCallId = callIdFromLocation() || joinedCall.current
+      if (liveCallId && typeof window !== "undefined" && window.location.pathname.startsWith("/call")) {
+        emitCallJoin(liveCallId)
+        joinedCall.current = liveCallId
+      }
     }
     function onDisconnect() {
       dispatch(setSocketConnected(false))
@@ -212,11 +218,44 @@ export function SocketBridge() {
       }
     }
 
+    function patchConversationLists(mutate: (draft: ConversationsList) => void) {
+      const queries = store.getState()[conversationsApi.reducerPath]?.queries
+      const seen = new Set<string>()
+      if (queries) {
+        for (const entry of Object.values(queries)) {
+          if (!entry || entry.endpointName !== "getConversations") continue
+          const key = JSON.stringify(entry.originalArgs ?? null)
+          if (seen.has(key)) continue
+          seen.add(key)
+          dispatch(
+            conversationsApi.util.updateQueryData(
+              "getConversations",
+              entry.originalArgs as never,
+              mutate
+            )
+          )
+        }
+      }
+      const defaultKey = JSON.stringify({ filter: "all" })
+      if (!seen.has(defaultKey)) {
+        dispatch(
+          conversationsApi.util.updateQueryData(
+            "getConversations",
+            { filter: "all" },
+            mutate
+          )
+        )
+      }
+    }
+
     function bumpConversation(conversationId: string, message: ChatMessage) {
       const viewing = threadIdFromPath(window.location.pathname) === conversationId
-      const updater = (draft: ConversationsList) => {
-        const row = draft.conversations.find((item) => item.id === conversationId)
-        if (!row) return
+      let found = false
+      patchConversationLists((draft) => {
+        const index = draft.conversations.findIndex((item) => item.id === conversationId)
+        if (index < 0) return
+        found = true
+        const row = draft.conversations[index]!
         row.preview = previewFromMessage(message)
         row.time = message.sentAt
           ? formatConversationTime(message.sentAt)
@@ -225,14 +264,16 @@ export function SocketBridge() {
           row.unread = (row.unread ?? 0) + 1
         }
         if (message.dir === "out") row.unread = 0
-      }
-      dispatch(
-        conversationsApi.util.updateQueryData(
-          "getConversations",
-          { filter: "all" },
-          updater
+        if (index > 0) {
+          draft.conversations.splice(index, 1)
+          draft.conversations.unshift(row)
+        }
+      })
+      if (!found) {
+        dispatch(
+          conversationsApi.util.invalidateTags([{ type: "Conversation", id: "LIST" }])
         )
-      )
+      }
     }
 
     function onMessageNew(payload: unknown) {
@@ -415,6 +456,16 @@ export function SocketBridge() {
         dispatch(setIncomingCall(null))
       }
       if (callId) {
+        // Flip live status immediately so WebRTC can start without waiting
+        // for a refetch — otherwise peer join / offers are easy to miss.
+        dispatch(
+          callsApi.util.updateQueryData("getCall", callId, (draft) => {
+            draft.status = "active"
+            if (!draft.answeredAt) {
+              draft.answeredAt = new Date().toISOString()
+            }
+          })
+        )
         dispatch(callsApi.util.invalidateTags([{ type: "Call", id: callId }]))
       }
       dispatch(callsApi.util.invalidateTags([{ type: "Calls", id: "LIST" }]))
@@ -432,7 +483,7 @@ export function SocketBridge() {
 
     function onCallClosed(
       payload: unknown,
-      status: "ended" | "declined" | "missed"
+      fallbackStatus: "ended" | "declined" | "missed"
     ) {
       const record = asRecord(payload)
       const nested = liveCallFromPayload(payload)
@@ -442,6 +493,25 @@ export function SocketBridge() {
         (typeof record?.callId === "string" ? record.callId : "") ||
         (typeof nestedCallId === "string" ? nestedCallId : "") ||
         (typeof record?.id === "string" ? record.id : "")
+      const statusRaw =
+        typeof record?.status === "string" ? record.status : nested?.status
+      const status: "ended" | "declined" | "missed" =
+        statusRaw === "declined" ||
+        statusRaw === "missed" ||
+        statusRaw === "ended"
+          ? statusRaw
+          : fallbackStatus
+      const endedBy =
+        entityId(record?.endedBy) || nested?.endedBy || undefined
+      const durationSec =
+        typeof record?.durationSec === "number"
+          ? record.durationSec
+          : nested?.durationSec
+      const conversationId =
+        nested?.conversationId ||
+        (typeof record?.conversationId === "string"
+          ? record.conversationId
+          : "")
       const incoming = store.getState().realtime.incomingCall
       if (!callId || incoming?.id === callId) {
         dispatch(setIncomingCall(null))
@@ -450,13 +520,12 @@ export function SocketBridge() {
         persistLiveCallId(null)
       }
       if (callId) {
-        closeCallInCache(dispatch, store.getState, callId, status)
+        closeCallInCache(dispatch, store.getState, callId, status, {
+          endedBy,
+          durationSec,
+          conversationId: conversationId || undefined,
+        })
         dispatch(callsApi.util.invalidateTags([{ type: "Call", id: callId }]))
-        const conversationId =
-          nested?.conversationId ||
-          (typeof record?.conversationId === "string"
-            ? record.conversationId
-            : "")
         if (conversationId) {
           dispatch(
             conversationsApi.util.invalidateTags([
@@ -472,6 +541,35 @@ export function SocketBridge() {
         }
       }
       dispatch(callsApi.util.invalidateTags([{ type: "Calls", id: "LIST" }]))
+
+      // Peer must leave the call screen immediately when the other person hangs up.
+      if (callId && callIdFromLocation() === callId) {
+        markCallRemotelyClosed(callId)
+        stopSoundLoop("incoming")
+        playSound("callEnd")
+        const meId = viewerRef.current
+        const cached = callsApi.endpoints.getCall.select(callId)(
+          store.getState() as never
+        )?.data
+        const peerName = cached?.peer.name?.split(" ")[0] || cached?.peer.name
+        const endedByIsMe = Boolean(endedBy && meId && endedBy === meId)
+        const endedByName =
+          !endedByIsMe && endedBy && peerName && endedBy !== meId
+            ? peerName
+            : !endedByIsMe && endedBy
+              ? peerName
+              : null
+        toast(
+          callEndedMessage(status, {
+            endedByIsMe,
+            endedByName:
+              endedBy && !endedByIsMe
+                ? endedByName || peerName || "The other person"
+                : null,
+          })
+        )
+        router.replace("/calls")
+      }
     }
 
     function onNotificationNew(payload: unknown) {
@@ -581,24 +679,38 @@ export function SocketBridge() {
       const conversationId = entityId(record?.conversationId)
       const preview =
         typeof record?.preview === "string" ? record.preview : ""
+      const lastMessageAt =
+        typeof record?.lastMessageAt === "string"
+          ? record.lastMessageAt
+          : typeof record?.time === "string"
+            ? record.time
+            : ""
       if (!conversationId) return
-      dispatch(
-        conversationsApi.util.updateQueryData(
-          "getConversations",
-          { filter: "all" },
-          (draft: ConversationsList) => {
-            const row = draft.conversations.find((item) => item.id === conversationId)
-            if (!row) return
-            if (preview) row.preview = preview
-            if (typeof record?.time === "string") {
-              row.time = formatConversationTime(record.time)
-            }
-            if (typeof record?.unread === "number") {
-              row.unread = record.unread
-            }
-          }
+      let found = false
+      patchConversationLists((draft) => {
+        const index = draft.conversations.findIndex((item) => item.id === conversationId)
+        if (index < 0) return
+        found = true
+        const row = draft.conversations[index]!
+        if (preview) row.preview = preview
+        if (lastMessageAt) row.time = formatConversationTime(lastMessageAt)
+        if (typeof record?.unread === "number") row.unread = record.unread
+        if (
+          typeof record?.previewIcon === "string" ||
+          record?.previewIcon === null
+        ) {
+          row.previewIcon = (record.previewIcon as Conversation["previewIcon"]) || undefined
+        }
+        if (index > 0) {
+          draft.conversations.splice(index, 1)
+          draft.conversations.unshift(row)
+        }
+      })
+      if (!found) {
+        dispatch(
+          conversationsApi.util.invalidateTags([{ type: "Conversation", id: "LIST" }])
         )
-      )
+      }
     }
 
     socket.on("connect", onConnect)
@@ -660,8 +772,7 @@ export function SocketBridge() {
     if (!pathname.startsWith("/call")) {
       if (joinedCall.current) {
         const leavingId = joinedCall.current
-        // Prefer HTTP end (clears Mongo + Redis busy). call:leave is also
-        // treated as hang-up on the new backend, but keepalive covers tab closes.
+        // End via HTTP only. Socket leave no longer hangs up the call.
         endCallKeepalive(leavingId)
         emitCallLeave(leavingId)
         joinedCall.current = ""
@@ -669,7 +780,12 @@ export function SocketBridge() {
       return
     }
     const callId = callIdFromLocation()
-    if (!callId || callId === joinedCall.current) return
+    if (!callId) return
+    if (callId === joinedCall.current) {
+      // Already tracked; still ensure we're in the room (e.g. after HMR).
+      emitCallJoin(callId)
+      return
+    }
     if (joinedCall.current) {
       endCallKeepalive(joinedCall.current)
       emitCallLeave(joinedCall.current)

@@ -64,21 +64,15 @@ export function ContactRow({ contact }: { contact: Contact }) {
   async function follow() {
     if (!personId && !contact.user) return
     try {
-      const result = personId
-        ? await followUser({
-            userId: personId,
-            preview: contactPreview(contact),
-          }).unwrap()
-        : await addContact({ username: contact.user }).unwrap()
-      if (result.hrefChat) {
-        router.push(result.hrefChat)
-        return
+      if (personId) {
+        await followUser({
+          userId: personId,
+          preview: contactPreview(contact),
+        }).unwrap()
+      } else {
+        await addContact({ username: contact.user }).unwrap()
       }
-      const chatId = personId || result.id
-      if (chatId) {
-        const chat = await openChat(chatId).unwrap()
-        router.push(chat.href || `/chats/${chat.conversationId}`)
-      }
+      toast(`Following ${contact.name}`)
     } catch (error) {
       toast.error(mutationErrorMessage(error, "Could not follow"))
     }
@@ -88,6 +82,7 @@ export function ContactRow({ contact }: { contact: Contact }) {
     if (!personId) return
     try {
       await unfollowUser(personId).unwrap()
+      toast(`Unfollowed ${contact.name}`)
     } catch (error) {
       toast.error(mutationErrorMessage(error, "Could not unfollow"))
     }

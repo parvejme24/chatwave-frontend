@@ -26,6 +26,8 @@ export function useCallMedia(kind: "audio" | "video"): CallMedia {
   const [muted, setMutedState] = useState(false)
   const [cameraOff, setCameraOffState] = useState(kind === "audio")
 
+  // Acquire once per call kind. Toggling camera only enables/disables the
+  // video track — stopping it freezes the last frame on the peer.
   useEffect(() => {
     if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
       return
@@ -33,7 +35,7 @@ export function useCallMedia(kind: "audio" | "video"): CallMedia {
 
     let current: MediaStream | null = null
     let cancelled = false
-    const wantVideo = kind === "video" && !cameraOff
+    const wantVideo = kind === "video"
 
     navigator.mediaDevices
       .getUserMedia({
@@ -50,6 +52,9 @@ export function useCallMedia(kind: "audio" | "video"): CallMedia {
         next.getAudioTracks().forEach((track) => {
           track.enabled = !muted
         })
+        next.getVideoTracks().forEach((track) => {
+          track.enabled = !cameraOff
+        })
         current = next
         setCamera(next)
       })
@@ -62,9 +67,8 @@ export function useCallMedia(kind: "audio" | "video"): CallMedia {
       stopStream(current)
       setCamera(null)
     }
-    // Re-acquire when camera toggles or call kind changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kind, cameraOff])
+  }, [kind])
 
   useEffect(() => {
     camera?.getAudioTracks().forEach((track) => {
@@ -72,11 +76,15 @@ export function useCallMedia(kind: "audio" | "video"): CallMedia {
     })
   }, [camera, muted])
 
+  useEffect(() => {
+    camera?.getVideoTracks().forEach((track) => {
+      track.enabled = !cameraOff
+    })
+  }, [camera, cameraOff])
+
   const stopShare = useCallback(() => {
     setScreen((current) => {
       if (!current) return null
-      // Detach ended listeners conceptually by clearing first; then stop tracks.
-      // Stopping tracks must not hang up the call — only the screen stream ends.
       current.getTracks().forEach((track) => {
         track.onended = null
         track.stop()

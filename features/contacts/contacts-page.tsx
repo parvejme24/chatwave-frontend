@@ -16,7 +16,7 @@ import { useAppSelector } from "../../lib/store/hooks"
 import { contactFromDto } from "../../lib/types/contact"
 import { sortContacts } from "../../lib/users"
 
-const DIRECTORY_LIMIT = 500
+const DIRECTORY_LIMIT = 200
 
 export function ContactsPage() {
   const me = useAppSelector(selectAuthUser)
@@ -25,7 +25,7 @@ export function ContactsPage() {
   const debounced = useDebouncedValue(query.trim(), 300)
   const searching = debounced.length > 0
 
-  // GET /api/contacts?limit=500 (& q when searching)
+  // GET /api/contacts?limit=200 (& q when searching)
   const {
     data: directory,
     isFetching: loadingContacts,
@@ -37,7 +37,7 @@ export function ContactsPage() {
     { skip: !token }
   )
 
-  // GET /api/contacts/following
+  // Following list only — do not re-fetch the full directory here.
   const {
     data: followingList,
     isFetching: loadingFollowing,

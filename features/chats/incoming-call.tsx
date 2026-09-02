@@ -95,13 +95,13 @@ export function IncomingCall() {
       const live = await acceptCall(callId).unwrap()
       dispatch(setIncomingCall(null))
       stopSoundLoop("incoming")
-      router.push(
+      const href =
         hrefForLiveCall(live) ||
-          (incoming ? hrefForLiveCall(incoming) : "") ||
-          polled?.href ||
-          polled?.actions?.[0]?.href ||
-          "/"
-      )
+        (incoming ? hrefForLiveCall(incoming) : "") ||
+        polled?.href ||
+        polled?.actions?.[0]?.href ||
+        "/"
+      router.replace(href.startsWith("/call") ? href : hrefForLiveCall(live) || href)
     } catch (error) {
       toast.error(mutationErrorMessage(error, "Could not accept call"))
     }

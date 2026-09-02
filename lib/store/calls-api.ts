@@ -93,13 +93,21 @@ export function closeCallInCache(
   dispatch: (action: unknown) => unknown,
   getState: () => unknown,
   callId: string,
-  status: CallStatus = "ended"
+  status: CallStatus = "ended",
+  extras?: { endedBy?: string; durationSec?: number; conversationId?: string }
 ) {
   // Patch the live call screen immediately so the peer leaves without waiting
   // for a poll / refetch after call:ended.
   dispatch(
     callsApi.util.updateQueryData("getCall", callId, (draft) => {
       draft.status = status as LiveCall["status"]
+      if (extras?.endedBy) draft.endedBy = extras.endedBy
+      if (typeof extras?.durationSec === "number") {
+        draft.durationSec = extras.durationSec
+      }
+      if (extras?.conversationId && !draft.conversationId) {
+        draft.conversationId = extras.conversationId
+      }
     })
   )
 
@@ -183,6 +191,7 @@ export const callsApi = createApi({
       async onQueryStarted(_arg, { dispatch, queryFulfilled, getState }) {
         try {
           const { data } = await queryFulfilled
+          dispatch(callsApi.util.upsertQueryData("getCall", data.id, data))
           const incoming = (
             getState() as { realtime?: { incomingCall?: LiveCall | null } }
           ).realtime?.incomingCall
@@ -204,13 +213,13 @@ export const callsApi = createApi({
         method: "POST",
       }),
       transformResponse: (response: unknown) => unwrapCall(response),
-      invalidatesTags: (_result, _error, id) => [
-        { type: "Calls", id: "LIST" },
-        { type: "Call", id },
-      ],
+      // Only refresh history list — upsert handles the live getCall cache so we
+      // don't race a refetch while navigating to /call.
+      invalidatesTags: [{ type: "Calls", id: "LIST" }],
       async onQueryStarted(id, { dispatch, queryFulfilled, getState }) {
         try {
-          await queryFulfilled
+          const { data } = await queryFulfilled
+          dispatch(callsApi.util.upsertQueryData("getCall", data.id, data))
           const incoming = (
             getState() as { realtime?: { incomingCall?: LiveCall | null } }
           ).realtime?.incomingCall
