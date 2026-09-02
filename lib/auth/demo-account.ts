@@ -14,7 +14,7 @@ export type DemoAccount = {
 export const DEMO_ACCOUNTS: readonly DemoAccount[] = [
   {
     id: "a",
-    label: "Test User A",
+    label: "User A",
     browserHint: "Browser 1",
     name: "Test User A",
     email: "mdparvejmep@gmail.com",
@@ -22,7 +22,7 @@ export const DEMO_ACCOUNTS: readonly DemoAccount[] = [
   },
   {
     id: "b",
-    label: "Test User B",
+    label: "User B",
     browserHint: "Browser 2",
     name: "Test User B",
     email: "mdparvejme24@gmail.com",

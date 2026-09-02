@@ -1,7 +1,7 @@
 "use client"
 
 import { zodResolver } from "@hookform/resolvers/zod"
-import { Loader2, LogIn, Sparkles } from "lucide-react"
+import { Loader2, LogIn } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
@@ -172,59 +172,33 @@ export function SignInForm() {
       <MotionItem delay={0.22}>
         <div className="my-5 flex items-center gap-3.5">
           <Separator className="flex-1 bg-edge" />
-          <span className="shrink-0 font-mono text-[11px] tracking-[0.14em] text-ink-4 uppercase">
-            or test the app
-          </span>
+          <span className="shrink-0 text-[12px] text-ink-4">or try a test account</span>
           <Separator className="flex-1 bg-edge" />
         </div>
 
-        <div className="rounded-[16px] border-2 border-dashed border-signal/45 bg-signal-wash px-4 py-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1 rounded-md bg-signal px-2 py-0.5 text-[10px] font-semibold tracking-[0.08em] text-white uppercase">
-              <Sparkles className="size-3 stroke-[2]" aria-hidden />
-              Test access
-            </span>
-            <span className="text-[11px] font-medium text-signal">
-              2 accounts · 2 browsers
-            </span>
-          </div>
-
-          <p className="mt-2.5 text-[15px] font-semibold tracking-[-0.015em] text-ink">
-            Login with test accounts
-          </p>
-
-          <div className="mt-3.5 grid grid-cols-2 gap-2 sm:gap-2.5">
-            {DEMO_ACCOUNTS.map((account) => {
-              const busy = activeDemoId === account.id
-              return (
-                <Button
-                  key={account.id}
-                  type="button"
-                  variant="outline"
-                  disabled={isSubmitting}
-                  onClick={() => void useDemoAccount(account)}
-                  className="h-auto min-h-[56px] w-full flex-col items-start justify-center gap-0.5 rounded-[14px] border-2 border-signal bg-surface px-2.5 py-2.5 text-left whitespace-normal sm:min-h-[60px] sm:px-3 hover:bg-signal hover:text-white"
-                >
-                  <span className="flex w-full items-center gap-1 text-[12.5px] font-semibold sm:text-[13.5px]">
-                    {busy ? (
-                      <Loader2
-                        className="size-3.5 shrink-0 animate-spin"
-                        aria-hidden
-                      />
-                    ) : null}
-                    <span className="truncate">{account.label}</span>
-                  </span>
-                  <span className="w-full text-[10.5px] leading-tight font-medium opacity-80 sm:text-[11px]">
-                    {account.browserHint}
-                  </span>
-                  <span className="w-full truncate text-[10px] leading-tight opacity-70 sm:text-[10.5px]">
-                    {account.email}
-                  </span>
-                </Button>
-              )
-            })}
-          </div>
+        <div className="grid grid-cols-2 gap-2">
+          {DEMO_ACCOUNTS.map((account) => {
+            const busy = activeDemoId === account.id
+            return (
+              <Button
+                key={account.id}
+                type="button"
+                variant="outline"
+                disabled={isSubmitting}
+                onClick={() => void useDemoAccount(account)}
+                className="h-10 w-full gap-1.5 rounded-[12px] border-edge bg-surface text-[13px] font-medium text-ink hover:bg-surface-2"
+              >
+                {busy ? (
+                  <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                ) : null}
+                {account.label}
+              </Button>
+            )
+          })}
         </div>
+        <p className="mt-2 text-center text-[12px] text-ink-4">
+          Open each account in a different browser to chat and call.
+        </p>
       </MotionItem>
 
       <MotionItem delay={0.25}>
